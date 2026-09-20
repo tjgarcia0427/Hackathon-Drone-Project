@@ -1,0 +1,17 @@
+platform :ios, '15.0'
+source 'https://cdn.cocoapods.org/'
+
+target 'GuardianAngel' do
+  pod 'DJI-SDK-iOS', '4.16.2'
+  pod 'DJIWidget', '1.6.8'
+  pod 'DJIFlySafeDatabaseResource', '01.00.01.18'
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      config.build_settings['ENABLE_BITCODE'] = 'NO'
+    end
+  end
+end
