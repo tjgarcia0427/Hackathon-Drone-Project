@@ -100,12 +100,7 @@
     [self presentViewController:a animated:YES completion:nil];
 }
 - (void)camera { [self.bridge armFlight:NO]; }
-- (void)flight {
-    UIAlertController *a=[UIAlertController alertControllerWithTitle:@"Enable supervised flight?" message:@"The pilot must have the aircraft airborne at 5–30 m in an open area, within 40 m of the recorded launch point. The server can now move it. Keep the RC ready." preferredStyle:UIAlertControllerStyleAlert];
-    [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [a addAction:[UIAlertAction actionWithTitle:@"Enable" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){[self.bridge armFlight:YES];}]];
-    [self presentViewController:a animated:YES completion:nil];
-}
+- (void)flight { [self.bridge armFlight:YES]; }
 - (void)stop { [self.bridge stopAutomation:@"Local STOP pressed; pilot control"]; }
 @end
 

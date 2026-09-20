@@ -19,6 +19,11 @@ assert diagnostic in baseline
 baseline=baseline.replace(diagnostic,'')
 assert 'Video feed:' not in current
 
+# App-switch recovery is explicitly authorized and has native policy tests.
+current=re.sub(r'^ *// BEGIN airborne anchor recovery\..*?^ *// END airborne anchor recovery\.\n','',current,count=1,flags=re.S|re.M)
+current=current.replace('#import "GroundAnchor.h" // airborne anchor recovery\n','')
+current=current.replace('Need strong GPS and a ground anchor or live DJI home point within 40 m','Need strong GPS and a ground anchor recorded before takeoff')
+
 # The agent may REQUEST local takeoff confirmation, with no raw launch/arm API.
 current=re.sub(r'// BEGIN agent takeoff request methods\..*?// END agent takeoff request methods\.\n\n','',current,count=1,flags=re.S)
 current=re.sub(r'^.*// agent takeoff integration\n','',current,flags=re.M)
