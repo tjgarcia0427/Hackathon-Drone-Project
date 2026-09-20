@@ -293,3 +293,17 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class EvidenceRouteTests(AgentTests):
+    async def test_evidence_route_serves_saved_frame_and_404s_unknown(self):
+        ident = uuid4()
+        Path(self.tmp.name, f"{ident}.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+        r = await self.client.get(f"/agent/evidence/{ident}.jpg")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.headers["content-type"], "image/jpeg")
+        self.assertEqual(r.content, b"\xff\xd8\xff\xd9")
+        self.assertEqual((await self.client.get(f"/agent/evidence/{uuid4()}.jpg")).status_code, 404)
+        anon = AsyncClient(transport=ASGITransport(app=app.app), base_url='http://test')
+        self.addAsyncCleanup(anon.aclose)
+        self.assertEqual((await anon.get(f"/agent/evidence/{ident}.jpg")).status_code, 401)

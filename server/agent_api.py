@@ -453,4 +453,13 @@ def install(app, runtime):
         return {"historical": not(active(runtime.S) and c.current["mission_id"] == str(mission_id)),
                 "note": "Memory never grants control or represents current telemetry", "memory": result}
 
+    @router.get("/evidence/{action_id}.jpg")
+    async def evidence(action_id: UUID):
+        """The exact frame a candidate report was made on (token-gated, read-only, historical)."""
+        from fastapi.responses import Response
+        path = controller().directory / (str(action_id) + ".jpg")
+        if not path.exists():
+            raise HTTPException(404, "Evidence frame not found")
+        return Response(path.read_bytes(), media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
     app.include_router(router)
