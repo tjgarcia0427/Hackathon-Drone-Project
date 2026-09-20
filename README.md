@@ -10,7 +10,7 @@ Hackathon prototype for Claude Code Build Day, Miami, September 20, 2026. A Watc
 
 ```mermaid
 flowchart LR
-    W[Watch or phone Shortcut] -->|Incident GPS over HTTP| S[Python server and selected AI]
+    W[Native Watch app: button or shake] -->|Incident GPS over HTTP| S[Python server and selected AI]
     D[Operator dashboard] -->|Review and dispatch| S
     S <-->|Commands and telemetry over WebSocket| I[iPhone bridge app]
     I -->|JPEG camera frames over HTTP| S
@@ -20,10 +20,11 @@ flowchart LR
 
 The server interprets images and chooses small actions. The iPhone validates those actions and runs a deterministic local flight-control loop through DJI's SDK. The pilot takes off manually and enables flight control locally on the iPhone before server commands can move the aircraft. Reconnecting never automatically re-arms it.
 
-The Watch trigger is a Shortcut/demo incident input. We have not built a Watch app or an integration with Apple's built-in fall-detection alerts. A visual "found" result is a candidate for human review; its current map coordinates are the aircraft's location, not a calculated location of the person.
+The native **Watch app** now provides Send Help and a deliberate shake gesture, a five-second cancel countdown, location capture, receipts/retries and default-on Test mode. Shake runs only while the app is active; it is not Apple's built-in fall detection. See [Watch setup and first test](docs/WATCH_SETUP.md). A visual "found" result is a candidate for human review; its current map coordinates are the aircraft's location, not a calculated location of the person.
 
 ## Start here
 
+- **Watch SE (2nd generation, watchOS 26.5):** [docs/WATCH_SETUP.md](docs/WATCH_SETUP.md).
 - **Mac/iPhone setup and staged tests:** [iphone-bridge/README.md](iphone-bridge/README.md).
 - **ChatGPT / Claude subscription or API setup:** [docs/AI_PROVIDERS.md](docs/AI_PROVIDERS.md).
 - **Teammate agent context and next tasks:** [docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md).
@@ -38,7 +39,7 @@ The Watch trigger is a Shortcut/demo incident input. We have not built a Watch a
 | iPhone with the pilot | Bridge app, USB connection to RC-N1, camera preview, local arm and STOP AI |
 | RC-N1 + Mavic Air 2 | Aircraft connection, manual takeoff, pilot takeover and DJI RTH |
 | Windows laptop or Mac server | Python server, detector, selected AI provider and operator dashboard |
-| Watch / incident phone | Shortcut sends incident location to the server |
+| Apple Watch SE (2nd generation) | Native Watch app sends button/shake help alerts and wearer GPS to the server |
 | Lorenzo / server side | Planner, detector, dashboard and incident flow |
 | TJ / iPhone side | Native bridge and coordinated protocol/integration changes |
 
@@ -86,17 +87,18 @@ Use a private LAN/hotspot or an authenticated private VPN. The command center ha
 
 ## Local tests and demo sequence
 
-Run `python -m unittest discover -s . -p "test_*.py" -v` from `server/` for provider, mission lifecycle and navigation checks. The ChatGPT subscription path has passed a real synthetic-image test and dashboard incident planning; Claude subscription and both API paths need live checks with your accounts. All **23 server tests passed**. Visual search decisions have an 8-second deadline, inside the existing 10-second frame-age check. The CLI default model timed out on the full search check; `gpt-5.6-luna` passed in 7.05 seconds on this laptop. Repeat `--search-check` with your chosen model/network before a mission.
+Run `python -m unittest discover -s . -p "test_*.py" -v` from `server/` for provider, mission lifecycle and navigation checks. The ChatGPT subscription path has passed a real synthetic-image test and dashboard incident planning; Claude subscription and both API paths need live checks with your accounts. The current server suite has **37 tests** including Watch acknowledgment, retries, cancellation, location and dispatch checks. Visual search uses `AI_SEARCH_TIMEOUT` (default 30 seconds); frame-age rejection follows that timeout plus 5 seconds, preserving the teammate's current implementation. The CLI default model timed out on the full search check; `gpt-5.6-luna` passed in 7.05 seconds on this laptop. Repeat `--search-check` with your chosen model/network before a mission.
 
 
-1. **Server-only simulation:** run `python sim_drone.py` from `server/` in another terminal. Use the dashboard's development incident and dispatch controls. This checks the existing server workflow without DJI hardware; it does not validate the iPhone.
-2. **iPhone mock mode:** build/install the app, then follow the mock-only smoke server instructions in the bridge README. This separate server makes no AI calls. Check camera uploads, command acknowledgments, movement math, STOP and reconnect. It rejects live hardware.
-3. **Bench connection:** stop the simulator/smoke server, start the project server, remove propellers, and verify DJI registration, telemetry, decoded camera preview and camera-only gimbal control.
-4. **Supervised flight:** record a valid ground GPS anchor in the bridge, take off manually with the RC, position within the demo envelope, enable flight locally, and verify short commands and physical takeover before dispatching an incident mission.
+1. **Watch alert-only test:** follow [WATCH_SETUP.md](docs/WATCH_SETUP.md), leave Test mode ON, and check a button alert, cancel, then a shake alert. No drone or AI account is needed for this stage.
+2. **Server-only simulation:** run `python sim_drone.py` from `server/` in another terminal. Use the dashboard's development incident and dispatch controls. This checks the existing server workflow without DJI hardware; it does not validate the iPhone.
+3. **iPhone mock mode:** build/install the app, then follow the mock-only smoke server instructions in the bridge README. This separate server makes no AI calls. Check camera uploads, command acknowledgments, movement math, STOP and reconnect. It rejects live hardware.
+4. **Bench connection:** stop the simulator/smoke server, start the project server, remove propellers, and verify DJI registration, telemetry, decoded camera preview and camera-only gimbal control.
+5. **Supervised flight:** record a valid ground GPS anchor in the bridge, take off manually with the RC, position within the demo envelope, enable flight locally, and verify short commands and physical takeover before dispatching an incident mission.
 
 Only one drone connection is allowed. Stop `sim_drone.py` before connecting the iPhone. Restart the project server when switching mock/live or changing launch locations, because the home anchor persists for that server session.
 
-For the Watch/phone Shortcut: get current location, then POST JSON to `http://YOUR-SERVER:8000/incident` with `latitude`, `longitude`, `accuracy`, and `source: "watch"`. Confirm location/network access on the device. Keep `AUTO_DISPATCH=0`: the dashboard operator reviews and dispatches the resulting plan. A mock event can be sent with:
+The native Watch uses `/watch/status` and `/watch/alerts`, with deduplication and fresh-location validation described in [the protocol](docs/PROTOCOL.md). For a legacy phone Shortcut only: get current location, then POST JSON to `http://YOUR-SERVER:8000/incident` with `latitude`, `longitude`, `accuracy`, and `source: "watch"`. Confirm location/network access on the device. Keep `AUTO_DISPATCH=0`: the dashboard operator reviews and dispatches the resulting plan. A mock event can be sent with:
 
 ```json
 {"latitude":25.7618,"longitude":-80.1918,"accuracy":5,"source":"demo"}
@@ -125,6 +127,8 @@ The iPhone independently enforces a 40 m ground-anchor radius, 5–30 m relative
 ## Repository layout
 
 ```text
+watch-app/                      SwiftUI Watch app, Xcode project, signing setup and portable core tests
+docs/WATCH_SETUP.md             Watch install, alert-only test, GPS dispatch and troubleshooting
 server/                         Python command center, planner, safety, detector, simulator, dashboard
 iphone-bridge/ios/              Native app, Xcode project, CocoaPods and Mac setup
 iphone-bridge/tools/            Mock-only transport server
@@ -136,4 +140,3 @@ docs/AGENT_HANDOFF.md           Teammate context and remaining device validation
 ```
 
 Work directly on `main` as requested by the team; this project is not using pull requests. Coordinate edits before replacing files another teammate is changing.
-

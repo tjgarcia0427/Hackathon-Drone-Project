@@ -114,7 +114,8 @@ result=json.loads(os.environ['TEST_RESULT'])
 if 'exec' in args:
     Path(args[args.index('--output-last-message')+1]).write_text(json.dumps(result))
 else:
-    print(json.dumps({'subtype':'success','is_error':False,'structured_output':result}))
+    print(json.dumps({'type':'system','subtype':'init'}))
+    print(json.dumps({'type':'result','subtype':'success','is_error':False,'structured_output':result}))
 ''', encoding='utf-8')
 
     def execute(self, provider):
@@ -139,6 +140,9 @@ else:
         request=self.execute('claude_code')
         self.assertEqual(request['args'][request['args'].index('--tools')+1], '')
         self.assertIn('--safe-mode',request['args'])
+        self.assertIn('--verbose',request['args'])
+        self.assertEqual(request['args'][request['args'].index('--input-format')+1], 'stream-json')
+        self.assertEqual(request['args'][request['args'].index('--output-format')+1], 'stream-json')
         payload=json.loads(request['stdin'])
         self.assertEqual(payload['message']['content'][0]['source']['data'],base64.b64encode(b'jpeg').decode())
         self.assertEqual(payload['message']['content'][1]['text'],'literal $(command) & data')

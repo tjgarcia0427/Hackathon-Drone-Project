@@ -1,0 +1,222 @@
+// !$*UTF8*$!
+{
+	"archiveVersion" = 1;
+	"classes" = {
+	};
+	"objectVersion" = 56;
+	"objects" = {
+		"000000000000000000000064" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "AlertModels.swift";
+			"sourceTree" = "<group>";
+		};
+		"0000000000000000000000C8" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "000000000000000000000064";
+		};
+		"000000000000000000000065" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "ContentView.swift";
+			"sourceTree" = "<group>";
+		};
+		"0000000000000000000000C9" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "000000000000000000000065";
+		};
+		"000000000000000000000066" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "GuardianWatchApp.swift";
+			"sourceTree" = "<group>";
+		};
+		"0000000000000000000000CA" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "000000000000000000000066";
+		};
+		"000000000000000000000067" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "ShakeDetector.swift";
+			"sourceTree" = "<group>";
+		};
+		"0000000000000000000000CB" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "000000000000000000000067";
+		};
+		"000000000000000000000068" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "WatchModel.swift";
+			"sourceTree" = "<group>";
+		};
+		"0000000000000000000000CC" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "000000000000000000000068";
+		};
+		"00000000000000000000012C" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "text.plist.xml";
+			"path" = "Info.plist";
+			"sourceTree" = "<group>";
+		};
+		"00000000000000000000012D" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "text.xcconfig";
+			"path" = "Config/Base.xcconfig";
+			"sourceTree" = "<group>";
+		};
+		"00000000000000000000012E" = {
+			"isa" = "PBXFileReference";
+			"explicitFileType" = "wrapper.application";
+			"includeInIndex" = 0;
+			"path" = "GuardianWatch.app";
+			"sourceTree" = "BUILT_PRODUCTS_DIR";
+		};
+		"00000000000000000000000A" = {
+			"isa" = "PBXGroup";
+			"children" = ("000000000000000000000064", "000000000000000000000065", "000000000000000000000066", "000000000000000000000067", "000000000000000000000068", "00000000000000000000012C");
+			"path" = "GuardianWatch";
+			"sourceTree" = "<group>";
+		};
+		"00000000000000000000000B" = {
+			"isa" = "PBXGroup";
+			"children" = ("00000000000000000000012E");
+			"name" = "Products";
+			"sourceTree" = "<group>";
+		};
+		"00000000000000000000000C" = {
+			"isa" = "PBXGroup";
+			"children" = ("00000000000000000000000A", "00000000000000000000012D", "00000000000000000000000B");
+			"sourceTree" = "<group>";
+		};
+		"000000000000000000000014" = {
+			"isa" = "PBXSourcesBuildPhase";
+			"buildActionMask" = 2147483647;
+			"files" = ("0000000000000000000000C8", "0000000000000000000000C9", "0000000000000000000000CA", "0000000000000000000000CB", "0000000000000000000000CC");
+			"runOnlyForDeploymentPostprocessing" = 0;
+		};
+		"000000000000000000000015" = {
+			"isa" = "PBXFrameworksBuildPhase";
+			"buildActionMask" = 2147483647;
+			"files" = ();
+			"runOnlyForDeploymentPostprocessing" = 0;
+		};
+		"000000000000000000000016" = {
+			"isa" = "PBXResourcesBuildPhase";
+			"buildActionMask" = 2147483647;
+			"files" = ();
+			"runOnlyForDeploymentPostprocessing" = 0;
+		};
+		"00000000000000000000001E" = {
+			"isa" = "XCBuildConfiguration";
+			"name" = "Debug";
+			"buildSettings" = {
+				"CLANG_ENABLE_MODULES" = "YES";
+				"SDKROOT" = "watchos";
+				"SWIFT_VERSION" = "5.0";
+				"SWIFT_OPTIMIZATION_LEVEL" = "-Onone";
+				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "DEBUG";
+				"DEBUG_INFORMATION_FORMAT" = "dwarf";
+				"ENABLE_TESTABILITY" = "YES";
+				"WATCHOS_DEPLOYMENT_TARGET" = "9.0";
+				"SWIFT_STRICT_CONCURRENCY" = "minimal";
+			};
+		};
+		"000000000000000000000020" = {
+			"isa" = "XCBuildConfiguration";
+			"name" = "Debug";
+			"baseConfigurationReference" = "00000000000000000000012D";
+			"buildSettings" = {
+				"PRODUCT_NAME" = "$(TARGET_NAME)";
+				"INFOPLIST_FILE" = "GuardianWatch/Info.plist";
+				"GENERATE_INFOPLIST_FILE" = "NO";
+				"TARGETED_DEVICE_FAMILY" = "4";
+				"SUPPORTED_PLATFORMS" = "watchos watchsimulator";
+				"CODE_SIGN_STYLE" = "Automatic";
+				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/Frameworks");
+				"SWIFT_EMIT_LOC_STRINGS" = "YES";
+				"SKIP_INSTALL" = "NO";
+			};
+		};
+		"00000000000000000000001F" = {
+			"isa" = "XCBuildConfiguration";
+			"name" = "Release";
+			"buildSettings" = {
+				"CLANG_ENABLE_MODULES" = "YES";
+				"SDKROOT" = "watchos";
+				"SWIFT_VERSION" = "5.0";
+				"SWIFT_OPTIMIZATION_LEVEL" = "-O";
+				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "";
+				"DEBUG_INFORMATION_FORMAT" = "dwarf-with-dsym";
+				"ENABLE_TESTABILITY" = "NO";
+				"WATCHOS_DEPLOYMENT_TARGET" = "9.0";
+				"SWIFT_STRICT_CONCURRENCY" = "minimal";
+			};
+		};
+		"000000000000000000000021" = {
+			"isa" = "XCBuildConfiguration";
+			"name" = "Release";
+			"baseConfigurationReference" = "00000000000000000000012D";
+			"buildSettings" = {
+				"PRODUCT_NAME" = "$(TARGET_NAME)";
+				"INFOPLIST_FILE" = "GuardianWatch/Info.plist";
+				"GENERATE_INFOPLIST_FILE" = "NO";
+				"TARGETED_DEVICE_FAMILY" = "4";
+				"SUPPORTED_PLATFORMS" = "watchos watchsimulator";
+				"CODE_SIGN_STYLE" = "Automatic";
+				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/Frameworks");
+				"SWIFT_EMIT_LOC_STRINGS" = "YES";
+				"SKIP_INSTALL" = "NO";
+			};
+		};
+		"000000000000000000000028" = {
+			"isa" = "XCConfigurationList";
+			"buildConfigurations" = ("00000000000000000000001E", "00000000000000000000001F");
+			"defaultConfigurationIsVisible" = 0;
+			"defaultConfigurationName" = "Release";
+		};
+		"000000000000000000000029" = {
+			"isa" = "XCConfigurationList";
+			"buildConfigurations" = ("000000000000000000000020", "000000000000000000000021");
+			"defaultConfigurationIsVisible" = 0;
+			"defaultConfigurationName" = "Release";
+		};
+		"000000000000000000000032" = {
+			"isa" = "PBXNativeTarget";
+			"name" = "GuardianWatch";
+			"productName" = "GuardianWatch";
+			"productType" = "com.apple.product-type.application";
+			"productReference" = "00000000000000000000012E";
+			"buildConfigurationList" = "000000000000000000000029";
+			"buildPhases" = ("000000000000000000000014", "000000000000000000000015", "000000000000000000000016");
+			"buildRules" = ();
+			"dependencies" = ();
+		};
+		"000000000000000000000001" = {
+			"isa" = "PBXProject";
+			"attributes" = {
+				"BuildIndependentTargetsInParallel" = "YES";
+				"LastUpgradeCheck" = "1600";
+				"TargetAttributes" = {
+					"000000000000000000000032" = {
+						"CreatedOnToolsVersion" = "16.0";
+						"ProvisioningStyle" = "Automatic";
+					};
+				};
+			};
+			"buildConfigurationList" = "000000000000000000000028";
+			"compatibilityVersion" = "Xcode 14.0";
+			"developmentRegion" = "en";
+			"hasScannedForEncodings" = 0;
+			"knownRegions" = ("en", "Base");
+			"mainGroup" = "00000000000000000000000C";
+			"productRefGroup" = "00000000000000000000000B";
+			"projectDirPath" = "";
+			"projectRoot" = "";
+			"targets" = ("000000000000000000000032");
+		};
+	};
+	"rootObject" = "000000000000000000000001";
+}

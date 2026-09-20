@@ -12,7 +12,7 @@ This package contains the native iPhone source, an Xcode project, a mock test se
 | iPhone beside the drone | Run this app, connected by a data cable to the RC-N1 controller |
 | DJI controller + Mavic Air 2 | Pilot supervision and aircraft connection |
 | Your Windows laptop | Existing Python server, dashboard and AI planner |
-| Watch / incident phone | Existing Shortcut posts the incident to the server |
+| Apple Watch | Native button/shake app sends help and wearer GPS; see [Watch setup](../docs/WATCH_SETUP.md) |
 
 You can develop remotely. **The controller-connected iPhone must physically be with the drone pilot.** A Mac or Watch by itself cannot replace it. If your only iPhone is with you elsewhere, your friend needs to borrow another compatible iPhone for the drone side.
 
@@ -150,7 +150,7 @@ There is one active command and a 10 Hz local control loop. The app attempts to 
 
 If the SDK reports that control release failed, the app blocks re-arming. Use physical RC takeover and press STOP again to retry the release. Video snapshots have a timeout and connection identifier so a delayed frame cannot be sent to a newly connected server. Upload failures appear in the app log.
 
-This package does not add a Watch app or subscribe to Apple's built-in fall-detection event. Your existing incident Shortcut/trigger and server-side AI remain separate. The current server's “found” coordinates are the **aircraft's coordinates**, not an estimated ground location of a person; treat detection as a visual candidate for human review.
+The separate [native Watch app](../watch-app/README.md) now sends button/shake help alerts and wearer GPS. It does not subscribe to Apple's built-in fall-detection event. The iPhone bridge and server-side AI remain separate components. The current server's “found” coordinates are the **aircraft's coordinates**, not an estimated ground location of a person; treat detection as a visual candidate for human review.
 
 ## Tests and file map
 
@@ -173,4 +173,3 @@ The three optional FastAPI transport tests require `python -m pip install -r too
 - `VALIDATION.md`: what was verified and what still needs hardware.
 
 API references: [DJI iOS SDK source/sample](https://github.com/dji-sdk/Mobile-SDK-iOS), [DJIWidget](https://github.com/dji-sdk/DJIWidget), [DJI flight controller API](https://developer.dji.com/api-reference/ios-api/Components/FlightController/DJIFlightController.html). Dependency licenses remain applicable; see `THIRD-PARTY-NOTICES.md`.
-

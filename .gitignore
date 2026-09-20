@@ -8,3 +8,7 @@ android/**/local.properties
 android/.gradle/
 .idea/
 .DS_Store
+watch-app/Config/Local.xcconfig
+watch-app/**/xcuserdata/
+watch-app/build/
+watch-app/DerivedData/

@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 
 
 class FallEvent(BaseModel):
-    """Inbound from the phone/watch (iOS Shortcut POSTs this)."""
-    event: Literal["fall_detected"] = "fall_detected"
+    """Incident input; manual Watch help is not an automatically detected fall."""
+    event: Literal["fall_detected", "help_requested"] = "fall_detected"
     latitude: float
     longitude: float
     accuracy: float = Field(10.0, description="GPS accuracy radius in meters")

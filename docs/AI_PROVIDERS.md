@@ -32,7 +32,7 @@ python ai_smoke_test.py --provider codex
 
 The second command checks installation/login without inference. The third creates a synthetic red-circle image and sends it through the selected AI. It should return `ok: true`, identify a red circle with no person, and report elapsed time. It never connects to or commands a drone.
 
-Before testing a search mission, check the actual search prompt/schema and its 8-second deadline:
+Before testing a search mission, check the actual search prompt/schema and its configured search deadline (default 30 seconds):
 
 ```text
 python ai_smoke_test.py --provider codex --model gpt-5.6-luna --search-check
@@ -110,7 +110,7 @@ On macOS use `export NAME='value'` instead of PowerShell's `$env:NAME = 'value'`
 
 ## Timing and flight behavior
 
-Incident planning has a 60-second deadline. Each visual search decision has an **8-second deadline**, preserving the existing 10-second maximum frame age. CLI startup, login checking, model latency and network time all count. The smoke test reports `within_search_deadline` as a rough readiness signal; a simple test image cannot guarantee a full mission meets that deadline. Test the chosen model and venue network before flight. If it is too slow, select a faster available model/provider; do not loosen frame-age checks to accept old observations.
+Incident planning has a 60-second deadline. Each visual search decision uses **`AI_SEARCH_TIMEOUT`, default 30 seconds**. The maximum accepted frame age is that deadline plus 5 seconds, matching the current teammate implementation. CLI startup, login checking, model latency and network time all count. The smoke test reports `within_search_deadline` as a rough readiness signal; a simple test image cannot guarantee a full mission meets that deadline. Test the chosen model and venue network before flight. If it is too slow, select a faster available model/provider; do not loosen frame-age checks to accept old observations.
 
 Failures, refusal, malformed decisions and timeout produce no AI movement decision. A running mission fails and requests release of app control; the pilot remains responsible for takeover. Reset/abort invalidates a late incident plan. AI returns typed decisions only: it is not given shell access or flight-control tools, and existing server/iPhone limits still validate every action. Subscription subprocesses run in temporary working folders, with tools/customizations disabled, and are terminated on timeout. A cancelled worker can finish in the background, but its result cannot issue commands.
 

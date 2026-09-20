@@ -24,6 +24,8 @@ import ai_backends
 import detector
 import planner
 import safety
+import watch_alerts
+from watch_alerts import WatchAlert
 from models import DroneState, FallEvent, MissionPlan, SearchStep
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
@@ -36,6 +38,9 @@ app = FastAPI(title="Rescue Command Center")
 
 class State:
     def __init__(self) -> None:
+        self.watch = watch_alerts.AlertStore()
+        self.watch_event_id: str | None = None
+        self.watch_plan_task: asyncio.Task | None = None
         self.planning = False
         self.plan_epoch = 0
         self.incident: FallEvent | None = None
@@ -56,6 +61,7 @@ class State:
 
     def snapshot(self) -> dict:
         return {
+            "watch_alerts": self.watch.recent(),
             "phase": self.phase,
             "planning": self.planning,
             "ai": planner.status(),
@@ -83,9 +89,9 @@ def log(msg: str, **extra: Any) -> None:
 
 async def broadcast(payload: dict) -> None:
     dead = []
-    for ws in S.dash:
+    for ws in list(S.dash):
         try:
-            await ws.send_text(json.dumps(payload))
+            await asyncio.wait_for(ws.send_text(json.dumps(payload)), 1.0)
         except Exception:  # noqa: BLE001
             dead.append(ws)
     for ws in dead:
@@ -184,42 +190,128 @@ async def ai_config(config: AIConfiguration) -> dict:
     return result
 
 
-@app.post("/incident")
-async def incident(fall: FallEvent) -> dict:
-    """Entry point for the phone/watch Shortcut."""
-    if S.planning or (S.search_task and not S.search_task.done()):
-        raise HTTPException(409, "planning/search already in progress")
+def begin_incident(fall: FallEvent, watch_event_id: str | None = None) -> int:
+    if S.planning or (S.search_task and not S.search_task.done()) or S.pending_acks:
+        raise HTTPException(409, "planning/search/command already in progress")
+    S.watch.update(S.watch_event_id, "cancelled", "Superseded by a new operator incident")
     S.plan_epoch += 1
-    epoch = S.plan_epoch
     S.planning = True
+    S.watch_event_id = watch_event_id
     S.plan = S.plan_verdict = None
     S.incident, S.found, S.history = fall, None, []
     S.phase = "planned"
-    log(f"FALL DETECTED at {fall.latitude:.6f},{fall.longitude:.6f} ±{fall.accuracy}m")
+    log(f"HELP INCIDENT at {fall.latitude:.6f},{fall.longitude:.6f} ±{fall.accuracy}m ({fall.source})")
+    return S.plan_epoch
+
+
+async def complete_incident(fall: FallEvent, epoch: int) -> dict:
     await push_state()
     try:
         proposed = await asyncio.wait_for(asyncio.to_thread(planner.plan_mission, fall), planner.plan_timeout())
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         if isinstance(e, TimeoutError):
             e = ai_backends.AIError("AI mission planning exceeded the 60-second deadline")
         log(f"planner failed: {e}")
-        S.planning = False
-        await push_state()
         raise HTTPException(502, f"planner failed: {e}") from e
     finally:
         S.planning = False
-    if epoch != S.plan_epoch:
         await push_state()
+    if epoch != S.plan_epoch:
         raise HTTPException(409, "Incident planning was cancelled or reset")
-    S.plan = proposed
+    # Navigation uses measured incident coordinates, never an AI-invented target.
+    S.plan = proposed.model_copy(update={"target_lat": fall.latitude, "target_lng": fall.longitude})
     home = S.home or (fall.latitude, fall.longitude)
     S.plan_verdict = safety.check_mission(S.plan, *home, S.drone)
+    S.watch.update(S.watch_event_id, "planned" if S.plan_verdict.ok else "rejected",
+                   "Plan ready for operator dispatch" if S.plan_verdict.ok else S.plan_verdict.reason)
     log(f"mission planned: r={S.plan.search_radius_m}m alt={S.plan.altitude_m}m {S.plan.pattern} "
         f"| safety={'OK' if S.plan_verdict.ok else 'REJECTED: ' + S.plan_verdict.reason}")
     await push_state()
+    if epoch != S.plan_epoch or S.plan is None:
+        raise HTTPException(409, "Incident planning was cancelled or reset")
     if AUTO_DISPATCH and S.plan_verdict.ok:
         await dispatch()
     return {"ok": True, "plan": S.plan.model_dump(), "safety": S.plan_verdict.__dict__}
+
+
+@app.post("/incident")
+async def incident(fall: FallEvent) -> dict:
+    """Legacy Shortcut/dashboard endpoint, waits for planning as before."""
+    epoch = begin_incident(fall)
+    return await complete_incident(fall, epoch)
+
+
+@app.get("/watch/status")
+async def watch_status() -> dict:
+    return {"protocol": 1, "server_session": S.watch.session,
+            "max_event_age_seconds": watch_alerts.MAX_EVENT_AGE,
+            "max_location_age_seconds": watch_alerts.MAX_LOCATION_AGE,
+            "max_accuracy_m": watch_alerts.MAX_LOCATION_ACCURACY,
+            "auto_dispatch": AUTO_DISPATCH}
+
+
+@app.get("/watch/alerts/{event_id}")
+async def watch_alert_status(event_id: str) -> dict:
+    S.watch.prune()
+    record = S.watch.records.get(event_id)
+    if not record:
+        raise HTTPException(404, "Alert not found in this server session")
+    return S.watch.public(record)
+
+
+async def complete_watch_incident(fall: FallEvent, epoch: int, event_id: str):
+    try:
+        await complete_incident(fall, epoch)
+    except HTTPException as exc:
+        S.watch.update(event_id, "cancelled" if epoch != S.plan_epoch else "failed", str(exc.detail))
+    except asyncio.CancelledError:
+        S.watch.update(event_id, "cancelled", "Planning cancelled")
+        raise
+    except Exception:
+        S.watch.update(event_id, "failed", "Planning failed; check the server log")
+        log("Watch incident planning failed unexpectedly")
+    finally:
+        await push_state()
+
+
+@app.post("/watch/alerts", status_code=202)
+async def watch_alert(event: WatchAlert) -> dict:
+    """Acknowledge receipt immediately; model calls run in a separate task."""
+    if str(event.server_session) != S.watch.session:
+        raise HTTPException(409, "Server restarted or changed; discard this alert, reconnect and send a new one")
+    S.watch.prune()
+    event_id = str(event.event_id)
+    existing = S.watch.records.get(event_id)
+    if existing:
+        if existing["event"] != event.model_dump(mode="json"):
+            raise HTTPException(409, "Event ID already used for a different alert")
+        return {"accepted": True, "duplicate": True, **S.watch.public(existing)}
+    if not -watch_alerts.FUTURE_TOLERANCE <= event.age() <= watch_alerts.MAX_EVENT_AGE:
+        raise HTTPException(422, "Alert is too old or its clock is ahead; send a new alert")
+    problem = event.location_problem()
+    busy = S.phase != "idle" or S.planning or (S.search_task and not S.search_task.done()) or S.pending_acks
+    if event.test_mode:
+        status, message = "test_received", "Test alert received; no mission created"
+    elif problem:
+        status, message = "location_rejected", problem
+    elif busy:
+        status, message = "busy", "Help alert received; current mission preserved. No mission queued"
+    else:
+        status, message = "planning", "Help alert received; preparing an operator-reviewed plan"
+    try:
+        record = S.watch.add(event, status, message)
+    except ValueError as exc:
+        raise HTTPException(429, str(exc)) from exc
+    log(f"Watch {'TEST' if event.test_mode else 'HELP'} received ({event.source}): {message}")
+    if status == "planning":
+        fall = FallEvent(event="help_requested", latitude=event.latitude, longitude=event.longitude, accuracy=event.accuracy,
+                         timestamp=event.timestamp.isoformat(), source=event.source)
+        epoch = begin_incident(fall, event_id)
+        S.watch_plan_task = asyncio.create_task(complete_watch_incident(fall, epoch, event_id))
+    # Never wait on a slow dashboard socket before acknowledging the Watch.
+    asyncio.create_task(broadcast({"type": "watch_alert", "alert": S.watch.public(record)}))
+    asyncio.create_task(push_state())
+    return {"accepted": True, "duplicate": False, **S.watch.public(record)}
 
 
 @app.post("/dispatch")
@@ -235,6 +327,18 @@ async def dispatch() -> dict:
         raise HTTPException(409, "fresh aircraft telemetry required")
     if S.home is None or not (5 <= S.plan.altitude_m <= 30) or safety.haversine_m(*S.home, S.plan.target_lat, S.plan.target_lng) > 35:
         raise HTTPException(400, "iPhone demo requires target within 35 m of launch and altitude 5..30 m")
+    verdict = safety.check_mission(S.plan, *S.home, S.drone)
+    if not verdict.ok:
+        raise HTTPException(400, verdict.reason)
+    if S.watch_event_id:
+        record = S.watch.records.get(S.watch_event_id)
+        if not record or time.monotonic() - record["received_monotonic"] > watch_alerts.MAX_DISPATCH_AGE:
+            raise HTTPException(409, "Watch destination expired; reset and send a fresh alert")
+        if record["status"] != "planned" or record["event"]["test_mode"]:
+            raise HTTPException(409, "This Watch alert cannot be dispatched")
+        if (S.plan.target_lat, S.plan.target_lng) != (record["event"]["latitude"], record["event"]["longitude"]):
+            raise HTTPException(400, "Destination must match the Watch location")
+    S.watch.update(S.watch_event_id, "dispatched", "Mission dispatched; pilot supervision required")
     S.phase = "dispatched"
     S.search_task = asyncio.create_task(run_mission())
     await push_state()
@@ -243,6 +347,7 @@ async def dispatch() -> dict:
 
 @app.post("/abort")
 async def abort() -> dict:
+    S.watch.update(S.watch_event_id, "cancelled", "Operator aborted this mission")
     S.plan_epoch += 1
     await iphone_cancel_mission()
     S.phase = "aborted"
@@ -292,6 +397,8 @@ async def state() -> dict:
 
 @app.post("/reset")
 async def reset() -> dict:
+    S.watch.update(S.watch_event_id, "cancelled", "Operator reset this mission")
+    S.watch_event_id = None
     S.plan_epoch += 1
     S.frame_epoch = getattr(S, "frame_epoch", 0) + 1
     await iphone_cancel_mission()
@@ -341,6 +448,7 @@ async def run_mission() -> None:
                     "observation": step.observation,
                 }
                 S.phase = "found"
+                S.watch.update(S.watch_event_id, "found", "Visual candidate found; operator review required")
                 log(f"SUBJECT LOCATED — {S.found['distance_from_report_m']}m from report, conf {step.confidence:.2f}")
                 await send_cmd("hold")
                 await push_state()
@@ -354,6 +462,7 @@ async def run_mission() -> None:
             elif step.action == "move":
                 await send_cmd("move", bearing=step.move_bearing_deg, dist=step.move_distance_m)
         S.phase = "aborted"
+        S.watch.update(S.watch_event_id, "aborted", "Search ended without a find")
         log("search ended without a find — returning home")
         await send_cmd("rtl", timeout=180)
     except asyncio.CancelledError:
@@ -363,6 +472,7 @@ async def run_mission() -> None:
         S.phase = "aborted"
         if isinstance(e, TimeoutError):
             e = ai_backends.AIError("AI search or command response exceeded its deadline")
+        S.watch.update(S.watch_event_id, "failed", "Mission failed; pilot intervention required")
         log(f"mission error: {e}")
         await iphone_stop("mission failed")
     finally:
@@ -408,6 +518,8 @@ async def ws_drone(ws: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
+        S.plan_epoch += 1
+        S.watch.update(S.watch_event_id, "cancelled", "Aircraft disconnected; reset before another mission")
         await iphone_cancel_mission()
         S.drone_ws = None
         S.telemetry_at = 0.0
@@ -437,4 +549,3 @@ async def index():
 
 
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
-

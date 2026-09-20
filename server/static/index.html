@@ -33,6 +33,10 @@
   .ai-field { display:flex; align-items:center; gap:8px; max-width:100%; }
   button:disabled, select:disabled, input:disabled { opacity:.5; cursor:not-allowed; }
   #ai-status { margin:8px 0 0; color:var(--dim); }
+  .watch-alert { border-left:3px solid var(--warn); padding:8px 10px; margin:10px 0; overflow-wrap:anywhere; }
+  .watch-alert.test { border-color:var(--acc); }
+  .watch-alert p { margin:4px 0; }
+  .watch-alert a { color:var(--acc); }
   @media(max-width:760px) { main { grid-template-columns:1fr; } header { flex-wrap:wrap; } }
 </style>
 </head>
@@ -45,6 +49,12 @@
 <main>
   <section>
     <div id="foundBanner" class="found-banner"></div>
+    <div class="panel" style="margin-bottom:16px">
+      <h2>Watch help alerts</h2>
+      <button id="watch-sound" class="btn ghost" onclick="enableAlertSound()">Enable alert sound</button>
+      <p style="color:var(--dim)">Alerts appear here immediately. Test alerts never create a mission. Review location and plan before dispatch.</p>
+      <div id="watch-alerts" aria-live="polite">No Watch alerts received.</div>
+    </div>
     <div class="panel">
       <h2>Live camera</h2>
       <img id="cam" src="" alt="waiting for frames">
@@ -95,6 +105,7 @@ const escapeHTML = v => String(v ?? "").replace(/[&<>"\']/g, c => ({"&":"&amp;",
 const kv = (el, obj) => { el.innerHTML = obj ? Object.entries(obj).map(([k,v]) => `<span>${escapeHTML(k)}</span><span>${escapeHTML(typeof v==='number'? +v.toFixed(6) : v)}</span>`).join('') : '<span>—</span><span></span>'; };
 function render(s) {
   renderAI(s);
+  renderWatchAlerts(s.watch_alerts || []);
   $('phase').textContent = s.phase; $('phase').className = 'phase ' + s.phase;
   $('dronedot').className = 'dot' + (s.drone_connected ? ' on' : '');
   $('dronetxt').textContent = s.drone_connected ? (s.drone?.drone_id || 'drone') + ' connected' : 'no drone';
@@ -113,6 +124,7 @@ function connect() {
   ws.onmessage = ev => {
     const m = JSON.parse(ev.data);
     if (m.type==='state') render(m.state);
+    else if (m.type==='watch_alert') receiveWatchAlert(m.alert);
     else if (m.type==='log') { $('log').insertAdjacentHTML('beforeend', fmtLog(m.entry)); $('log').scrollTop=1e9; }
     else if (m.type==='telemetry') kv($('drone'), m.drone);
     else if (m.type==='frame') { $('cam').src = '/frame.jpg?t=' + Date.now();
@@ -127,6 +139,57 @@ async function post(path, body) {
   return data;
 }
 let aiOptions=[], activeAI='';
+let watchAlerts=[], soundContext=null;
+const soundedWatchIds=new Set();
+async function enableAlertSound() {
+  try {
+    const Audio=contextAudio();
+    soundContext ||= new Audio();
+    await soundContext.resume();
+    $('watch-sound').textContent='Alert sound enabled';
+  } catch { $('watch-sound').textContent='Audio unavailable in this browser'; }
+}
+function contextAudio() { return window.AudioContext || window.webkitAudioContext; }
+function renderWatchAlerts(alerts) {
+  watchAlerts=alerts.slice(0,8);
+  const rows=watchAlerts.map(a=>{
+    const row=document.createElement('article');
+    row.className='watch-alert'+(a.test_mode?' test':'');
+    const title=document.createElement('strong');
+    title.textContent=(a.test_mode?'TEST':'HELP')+' · '+(a.source==='watch_shake'?'Shake gesture':'Send Help button');
+    const description=document.createElement('p');
+    description.textContent=a.status+' — '+a.message;
+    const time=document.createElement('p');
+    time.textContent=new Date(a.received_at*1000).toLocaleTimeString();
+    row.append(title,description,time);
+    if(Number.isFinite(a.latitude) && Number.isFinite(a.longitude) && Number.isFinite(a.accuracy)) {
+      const link=document.createElement('a');
+      link.href='https://maps.apple.com/?ll='+encodeURIComponent(a.latitude+','+a.longitude);
+      link.target='_blank'; link.rel='noopener noreferrer';
+      link.textContent=a.latitude.toFixed(6)+', '+a.longitude.toFixed(6)+' · ±'+a.accuracy.toFixed(0)+' m';
+      row.append(link);
+    } else {
+      const missing=document.createElement('p'); missing.textContent='No usable GPS supplied — no location-based mission.'; row.append(missing);
+    }
+    return row;
+  });
+  if(rows.length) $('watch-alerts').replaceChildren(...rows);
+  else $('watch-alerts').textContent='No Watch alerts received.';
+}
+function receiveWatchAlert(alert) {
+  // State snapshots/reconnects update the list silently; only a new event chirps.
+  renderWatchAlerts([alert,...watchAlerts.filter(a=>a.event_id!==alert.event_id)]);
+  if(soundedWatchIds.has(alert.event_id)) return;
+  soundedWatchIds.add(alert.event_id);
+  if(soundedWatchIds.size>256) soundedWatchIds.delete(soundedWatchIds.values().next().value);
+  if(soundContext?.state!=='running') return;
+  const tone=soundContext.createOscillator(), volume=soundContext.createGain();
+  tone.frequency.value=alert.test_mode?540:880;
+  volume.gain.setValueAtTime(0.12,soundContext.currentTime);
+  volume.gain.exponentialRampToValueAtTime(0.001,soundContext.currentTime+0.4);
+  tone.connect(volume); volume.connect(soundContext.destination);
+  tone.start(); tone.stop(soundContext.currentTime+0.4);
+}
 function renderAI(s) {
   if(!s.ai) return;
   aiOptions=s.ai.options || [];
@@ -154,4 +217,3 @@ connect();
 </script>
 </body>
 </html>
-

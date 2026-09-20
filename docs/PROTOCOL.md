@@ -88,7 +88,7 @@ These are application checks, not obstacle avoidance or a guaranteed watchdog af
 
 The iPhone decodes DJI video through DJIWidget, snapshots a rendered frame, downsizes and uploads JPEG. Snapshot callbacks time out and are tied to the original server connection to avoid late uploads after reconnection.
 
-The integrated server accepts nonempty frames up to 2 MB only while a drone WebSocket is connected. It waits for a fresh frame after each action before asking the planner; telemetry must be under 3 s old. Search inference has an 8-second deadline. A planner decision based on a frame older than 10 s is rejected. A timeout fails the mission and requests app-control release. Reset/reconnection invalidates in-flight detector results from the previous session.
+The integrated server accepts nonempty frames up to 2 MB only while a drone WebSocket is connected. It waits for a fresh frame after each action before asking the planner; telemetry must be under 3 s old. Search inference uses `AI_SEARCH_TIMEOUT` (default 30 seconds). A planner decision based on a frame older than that deadline plus 5 s is rejected. A timeout fails the mission and requests app-control release. Reset/reconnection invalidates in-flight detector results from the previous session.
 
 - `GET /ai`: selected provider/model, provider options and local setup status; no credentials.
 - `POST /ai/config`: JSON `{ "provider":"codex", "model":"" }`; providers are `codex`, `claude_code`, `openai_api`, `anthropic_api`. Only allowed while idle, with no in-flight planning/search/commands. Invalid setup returns 400, busy state 409, unknown fields 422. Selection is in memory until restart. See [AI_PROVIDERS.md](AI_PROVIDERS.md).
@@ -101,9 +101,39 @@ The integrated server accepts nonempty frames up to 2 MB only while a drone WebS
 
 The server's current `found.lat`/`found.lng` are the **aircraft coordinates**, not person geolocation. Detection and confidence require human interpretation.
 
+## Native Watch alert protocol (v1)
+
+The Watch is an HTTP client of the project server, independent of the iPhone/drone WebSocket. Run a single server worker on a private LAN. See [WATCH_SETUP.md](WATCH_SETUP.md) for installation and device tests.
+
+1. `GET /watch/status` returns `protocol: 1`, a per-process `server_session` UUID, `max_event_age_seconds: 60`, `max_location_age_seconds: 15`, `max_accuracy_m: 20`, and `auto_dispatch`.
+2. `POST /watch/alerts` receives the following JSON. Create a new `event_id` for each deliberate trigger. Use current timezone-aware timestamps and the session from step 1. Example values below are placeholders, not a replayable flight request:
+
+```json
+{
+  "event_id": "11111111-1111-4111-8111-111111111111",
+  "server_session": "22222222-2222-4222-8222-222222222222",
+  "source": "watch_button",
+  "timestamp": "2026-09-20T16:00:00.000Z",
+  "test_mode": true,
+  "latitude": 25.7617,
+  "longitude": -80.1918,
+  "accuracy": 8.0,
+  "location_timestamp": "2026-09-20T16:00:00.000Z"
+}
+```
+
+`source` is `watch_button` or `watch_shake`; neither implies automatic fall detection. `test_mode` must be a JSON boolean (defaults true when omitted). Omit all four location fields or set them all to null when a usable fix is unavailable; partial location fields are invalid. Coordinates/accuracy must be finite JSON numbers. Latitude is restricted to the demo's navigation range, -85 to 85 exclusive; longitude -180 to 180 inclusive; accuracy nonnegative. Unknown fields are rejected.
+
+An accepted event returns HTTP **202** with `accepted: true`, `duplicate: false`, the event fields, `received_at` (Unix seconds), `status` and `message`. This acknowledges receipt **before** asynchronous AI planning. The same UUID and identical normalized payload return `duplicate: true` and the retained status without replanning, even after reset/cancellation. Reusing an ID with a different payload or session returns 409. An unknown old event (>60 seconds), a trigger clock >5 seconds ahead, or malformed payload returns 422. Capacity returns 429; IDs are not evicted early. A changed session means restart: do not replay it as a new event automatically.
+
+Test mode always produces `test_received` and no mission. Live events without GPS, with location age >15 seconds or >5 seconds in the future, or accuracy >20 m produce `location_rejected`: operator alert only. If another mission is not idle, status is `busy`; no replacement/queue is created. Otherwise status starts `planning`, then becomes `planned`, `rejected`, `failed` or `cancelled`. Internal incident type is `help_requested`. Plan coordinates are fixed to the submitted GPS; AI cannot replace them.
+
+`GET /watch/alerts/{event_id}` returns the retained event/status, or 404 if unknown/expired/restarted. At dispatch, the server requires `planned`, non-test status, matching target, fresh aircraft telemetry, current battery and full search-area limits; a Watch destination expires 120 seconds after receipt (monotonic clock). Subsequent statuses include `dispatched`, `found`, `aborted`, `failed`, `cancelled`.
+
+`/ws/dashboard` emits `{"type":"watch_alert","alert":{...}}` once for each new accepted ID. State snapshots include `watch_alerts` (eight most recent records with updated status). Retries do not emit another new-alert notification. Retention is 15 minutes, capped at 256 records per process. Records are not durable across server restarts; the changing session UUID prevents unknown delayed retries from generating another mission.
+
 ## Test modes
 
 `server/sim_drone.py` is the original server-only simulator and does not implement every iPhone interlock or RTH completion behavior. Use it to exercise the dashboard/planner, not to certify this protocol on hardware.
 
 For the iPhone wire contract, use the app's mock mode with `iphone-bridge/tools/smoke_server.py`; follow [the bridge test instructions](../iphone-bridge/README.md). Its `/command` endpoint sends commands and returns their acknowledgments, `/state` shows telemetry/JPEG byte count, and `/frame.jpg` shows a labelled mock image. This smoke server has no incident/planner flow and rejects live aircraft connections.
-
