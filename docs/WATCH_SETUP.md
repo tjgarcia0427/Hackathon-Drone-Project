@@ -110,6 +110,8 @@ A second live alert while a mission is planned/planning/running/found/aborted is
 
 ## Verification and remaining device work
 
+**The Watch simulator build and Swift core tests passed in macOS CI**, along with all 37 server tests. See the [validation record](../watch-app/VALIDATION.md) for the exact run and SDK. The CI SDK was watchOS 11.5; installation on your watchOS 26.5 SE still requires a newer compatible Xcode on the teammate's Mac.
+
 Run server tests with `python -m unittest discover -s server -p 'test_*.py' -v` from repo root. On Mac run `bash watch-app/test-core-mac.sh` for gesture/cooldown, location policy, URL validation and pending-payload serialization. `.github/workflows/watch-checks.yml` also runs those checks and compiles the Watch app for the simulator without signing, when GitHub Actions is enabled and the connector permits publishing workflow files.
 
 A simulator compile is not signed installation or physical validation. Verify on this SE: permissions, receipt over the venue network, outdoor GPS accuracy, deliberate motion thresholds (1.5 g trigger, 0.45 g reset, three peaks ≥0.25 s apart in two seconds), haptics, cancellation, app backgrounding and lost-response retry. Tune motion only after observing test-mode behavior on the real Watch. No physical Watch/aircraft test can be performed from the Windows development environment.

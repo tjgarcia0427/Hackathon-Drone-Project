@@ -4,7 +4,7 @@ Hackathon prototype for Claude Code Build Day, Miami, September 20, 2026. A Watc
 
 **The current implementation uses iPhone + DJI Mobile SDK V4 iOS. Android is no longer part of the build plan.** We use DJI's app SDK; aircraft firmware is not modified.
 
-**Status:** native app source and Xcode project implemented; portable navigation and server tests pass. The app has not yet been compiled in Xcode or tested on an iPhone/aircraft. Treat Mac build, DJI registration, video, and hardware control as the next milestones.
+**Status:** the native Watch app **compiles and links in Xcode CI**, its Swift core tests pass, and all 37 server tests pass. See [Watch validation](watch-app/VALIDATION.md). Signed installation and real GPS/motion/network tests on the team's SE remain. The separate iPhone bridge has portable navigation/server tests; its Xcode/device/aircraft validation must be completed by the team.
 
 ## How the pieces connect
 

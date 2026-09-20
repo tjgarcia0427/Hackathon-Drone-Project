@@ -178,7 +178,9 @@ function renderWatchAlerts(alerts) {
 }
 function receiveWatchAlert(alert) {
   // State snapshots/reconnects update the list silently; only a new event chirps.
-  renderWatchAlerts([alert,...watchAlerts.filter(a=>a.event_id!==alert.event_id)]);
+  // A state snapshot may arrive before the initial notification with a newer status.
+  const current=watchAlerts.find(a=>a.event_id===alert.event_id) || alert;
+  renderWatchAlerts([current,...watchAlerts.filter(a=>a.event_id!==alert.event_id)]);
   if(soundedWatchIds.has(alert.event_id)) return;
   soundedWatchIds.add(alert.event_id);
   if(soundedWatchIds.size>256) soundedWatchIds.delete(soundedWatchIds.values().next().value);
