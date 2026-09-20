@@ -39,7 +39,7 @@ The five-Hz schedule sends the latest SDK observations; sensor timing and connec
 
 Coordinates use decimal degrees. Altitude is metres relative to takeoff, not altitude above terrain or sea level. Heading/bearing is compass degrees clockwise from north. Bridge status is `idle`, `searching` while a command is active, or `rtl`; it does not attest that the phone is armed. Arm/disarm state is shown locally on the iPhone.
 
-The phone records home from valid GPS while on the ground. Start the bridge before manual takeoff. The server uses `home_latitude`/`home_longitude`, falling back to the first telemetry coordinates for the older simulator. Restart the server when changing launch location or switching mock/live; resetting a mission does not reset its home reference.
+The phone records home from valid GPS while on the ground. Start the bridge before takeoff. The local **Take off (pilot)** button retains that anchor and the server connection; it is not a protocol command. See [pilot takeoff](PILOT_TAKEOFF.md). The server uses `home_latitude`/`home_longitude`, falling back to the first telemetry coordinates for the older simulator. Restart the server when changing launch location or switching mock/live; resetting a mission does not reset its home reference.
 
 Completion acknowledgments:
 
@@ -92,7 +92,7 @@ The server safety layer checks target plus planned search radius within 35 m of 
 
 The phone independently enforces a 40 m ground-anchor radius, altitude 5–30 m, horizontal velocity ≤1 m/s and vertical velocity ≤0.5 m/s. It requests release/disarms on monitored heartbeat loss (>4 s), stale FC data (>1.5 s), stale battery (>5 s), GPS loss, battery below 25%, foreground loss, unavailable virtual stick, a loop stall >0.6 s, or leaving its envelope. It requires ≥30% battery for flight enable/new navigation.
 
-These are application checks, not obstacle avoidance or a guaranteed watchdog after force-kill/cable loss. Manual takeoff, clear paths, DJI failsafes and pilot takeover remain part of the demo.
+These are application checks, not obstacle avoidance or a guaranteed watchdog after force-kill/cable loss. Pilot-operated takeoff, clear paths, DJI failsafes and pilot takeover remain part of the demo.
 
 ## Frames and mission lifecycle
 

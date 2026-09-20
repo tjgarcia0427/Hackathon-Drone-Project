@@ -19,6 +19,12 @@ assert diagnostic in baseline
 baseline=baseline.replace(diagnostic,'')
 assert 'Video feed:' not in current
 
+# Explicitly authorized local pilot-takeoff additions. The policy has native behavior tests.
+current=re.sub(r'// BEGIN pilot takeoff methods\..*?// END pilot takeoff methods\.\n\n','',current,count=1,flags=re.S)
+current=re.sub(r'^.*// pilot takeoff integration\n','',current,flags=re.M)
+current=current.replace('GATakeoffBusy(_pilotTakeoff)?[self takeoffStatus]:','')
+current=current.replace('Pilot must use Take off or the RC, then climb to 5–30 m','Pilot must take off manually first, then climb to 5–30 m')
+
 current=re.sub(r'\n// Read-only presentation snapshot\..*?\n}\n\n','',current,count=1,flags=re.S)
 current=current.replace('#import "TelemetryDisplay.h" // display-only observations\n','')
 current=current.replace('    GATelemetrySample _displaySample; // display-only observations\n','')
@@ -32,4 +38,4 @@ assert guard in new_report,'Original full-navigation report guards must remain'
 assert '"type":@"aircraft_status"' in new_report,'Partial observations need their own non-navigation message'
 current=current.replace(new_report,old_report)
 assert current.strip()==baseline.strip(),'Flight, command, connection or video code changed outside read-only observations/reporting'
-print('Bench flight, command, connection and video code preserved; telemetry observations/reporting isolated.')
+print('Bench flight, command, connection and video code preserved; telemetry and authorized pilot-takeoff additions isolated.')

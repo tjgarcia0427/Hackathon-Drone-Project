@@ -6,6 +6,9 @@
 @property(nonatomic,copy) void (^updated)(NSString *);
 - (instancetype)initWithPreview:(UIView *)preview mock:(BOOL)mock;
 - (void)start;
+- (NSString *)takeoffProblem;
+- (BOOL)pilotTakeoffBusy;
+- (void)pilotTakeoff;
 - (void)armFlight:(BOOL)flight;
 - (void)stopAutomation:(NSString *)reason;
 - (void)shutdown;

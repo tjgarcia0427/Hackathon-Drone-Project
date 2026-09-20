@@ -118,7 +118,7 @@ Shows the **last 4** entries: Roboto Mono 11.5/16, timestamp `#71767A` then mess
 
 #### Footnote
 Public Sans 400, 11/15, `#565C65`:
-> Manual takeoff required. Keep this app in the foreground. Stop releases AI flight control only; DJI return-to-home and motor control remain with the aircraft and the pilot's RC. No obstacle or terrain avoidance is provided.
+> Pilot-operated takeoff required. Use Take off (pilot) inside Guardian Angel, then climb with the RC to 5–30 m before enabling AI flight. Keep this app in the foreground. STOP requests cancellation of a pending pilot takeoff or releases AI flight control; DJI return-to-home and motor control remain with the aircraft and the pilot's RC. No obstacle or terrain avoidance is provided.
 
 #### STOP bar (pinned)
 White bar, 1 pt top border `#DFE1E2`, padding 10 pt 16 pt + safe-area bottom.

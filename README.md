@@ -43,7 +43,7 @@ With several people visible, the AI lists candidates and selects one. The server
 |---|---|
 | Teammate's Mac | Xcode, CocoaPods, DJI iOS app key, signing, installation and device logs |
 | iPhone with the pilot | Bridge app, USB connection to RC-N1, camera preview, local arm and STOP AI |
-| RC-N1 + Mavic Air 2 | Aircraft connection, manual takeoff, pilot takeover and DJI RTH |
+| RC-N1 + Mavic Air 2 | Aircraft connection, pilot takeoff, pilot takeover and DJI RTH |
 | Windows laptop or Mac server | Python server, detector, selected AI provider and operator dashboard |
 | Apple Watch SE (2nd generation) | Native Watch app sends button/shake help alerts and wearer GPS to the server |
 | Lorenzo / server side | Planner, detector, dashboard and incident flow |
@@ -91,16 +91,18 @@ Current `server/app.py` already includes the iPhone integration: command expiry,
 
 Use a private LAN/hotspot or an authenticated private VPN. The command center has no authentication; do not expose port 8000 through a public tunnel. For remote collaboration the server can also run beside the pilot. HTTP and WebSocket connectivity must work in both directions over the chosen network.
 
+The iPhone now has **Take off (pilot)** with local confirmation. Stay in Guardian Angel to retain the server connection and ground anchor through launch; AI flight enabling remains separate. See [pilot takeoff setup and validation](docs/PILOT_TAKEOFF.md).
+
 ## Local tests and demo sequence
 
-Run `python -m unittest discover -s . -p "test_*.py" -v` from `server/` for provider, mission lifecycle and navigation checks. The ChatGPT subscription path has passed a real synthetic-image test and dashboard incident planning; Claude subscription and both API paths need live checks with your accounts. The current server suite has **37 tests** including Watch acknowledgment, retries, cancellation, location and dispatch checks. Visual search uses `AI_SEARCH_TIMEOUT` (default 30 seconds); frame-age rejection follows that timeout plus 5 seconds, preserving the teammate's current implementation. The CLI default model timed out on the full search check; `gpt-5.6-luna` passed in 7.05 seconds on this laptop. Repeat `--search-check` with your chosen model/network before a mission.
+Run `python -m unittest discover -s . -p "test_*.py" -v` from `server/` for provider, mission lifecycle and navigation checks. The ChatGPT subscription path has passed a real synthetic-image test and dashboard incident planning; Claude subscription and both API paths need live checks with your accounts. The current server suite has **74 tests** including Watch acknowledgment, retries, cancellation, location and dispatch checks. Visual search uses `AI_SEARCH_TIMEOUT` (default 30 seconds); frame-age rejection follows that timeout plus 5 seconds, preserving the teammate's current implementation. The CLI default model timed out on the full search check; `gpt-5.6-luna` passed in 7.05 seconds on this laptop. Repeat `--search-check` with your chosen model/network before a mission.
 
 
 1. **Watch alert-only test:** follow [WATCH_SETUP.md](docs/WATCH_SETUP.md), leave Test mode ON, and check a button alert, cancel, then a shake alert. No drone or AI account is needed for this stage.
 2. **Server-only simulation:** run `python sim_drone.py` from `server/` in another terminal. Use the dashboard's development incident and dispatch controls. This checks the existing server workflow without DJI hardware; it does not validate the iPhone.
 3. **iPhone mock mode:** build/install the app, then follow the mock-only smoke server instructions in the bridge README. This separate server makes no AI calls. Check camera uploads, command acknowledgments, movement math, STOP and reconnect. It rejects live hardware.
 4. **Bench connection:** stop the simulator/smoke server, start the project server, remove propellers, and verify DJI registration, telemetry, decoded camera preview and camera-only gimbal control.
-5. **Supervised flight:** record a valid ground GPS anchor in the bridge, take off manually with the RC, position within the demo envelope, enable flight locally, and verify short commands and physical takeover before dispatching an incident mission.
+5. **Supervised flight:** record a valid ground GPS anchor in the bridge, use **Take off (pilot)** in Guardian Angel (or take off with the RC), then climb with the RC into the 5–30 m demo envelope, enable flight locally, and verify short commands and physical takeover before dispatching an incident mission.
 
 Only one drone connection is allowed. Stop `sim_drone.py` before connecting the iPhone. Restart the project server when switching mock/live or changing launch locations, because the home anchor persists for that server session.
 

@@ -5,9 +5,10 @@
 @property(nonatomic,strong) UIView *preview;
 @property(nonatomic,strong) UITextField *address;
 @property(nonatomic,strong) UISwitch *mockSwitch;
-@property(nonatomic,strong) UILabel *status;
+@property(nonatomic,strong) UILabel *status, *takeoffHelp;
 @property(nonatomic,strong) UITextView *logView;
 @property(nonatomic,strong) UIButton *hardwareButton;
+@property(nonatomic,strong) UIButton *takeoffButton, *stopButton;
 @end
 @implementation BridgeViewController
 - (UIButton *)button:(NSString *)title selector:(SEL)selector color:(UIColor *)color {
@@ -47,11 +48,14 @@
     self.address.text=[[NSUserDefaults standardUserDefaults] stringForKey:@"serverURL"]?:@"http://192.168.1.100:8000";
     self.address.accessibilityLabel=@"Server base URL"; [stack addArrangedSubview:self.address];
     [stack addArrangedSubview:[self button:@"2. Connect / reconnect server" selector:@selector(connect) color:UIColor.systemBlueColor]];
+    self.takeoffButton=[self button:@"3. Take off (pilot)" selector:@selector(takeoff) color:UIColor.systemBlueColor];
+    self.takeoffButton.enabled=NO; self.takeoffButton.accessibilityIdentifier=@"pilot.takeoff"; [stack addArrangedSubview:self.takeoffButton];
+    self.takeoffHelp=[UILabel new]; self.takeoffHelp.numberOfLines=0; self.takeoffHelp.font=[UIFont systemFontOfSize:12]; self.takeoffHelp.text=@"Start the bridge and connect the server before takeoff."; [stack addArrangedSubview:self.takeoffHelp];
     UIStackView *arms=[UIStackView new]; arms.axis=UILayoutConstraintAxisHorizontal; arms.spacing=8; arms.distribution=UIStackViewDistributionFillEqually;
     [arms addArrangedSubview:[self button:@"Camera only" selector:@selector(camera) color:UIColor.systemTealColor]];
     [arms addArrangedSubview:[self button:@"Enable flight" selector:@selector(flight) color:UIColor.systemOrangeColor]]; [stack addArrangedSubview:arms];
-    [stack addArrangedSubview:[self button:@"STOP AI • return control to pilot" selector:@selector(stop) color:UIColor.systemRedColor]];
-    UILabel *hint=[UILabel new]; hint.numberOfLines=0; hint.font=[UIFont systemFontOfSize:12]; hint.text=@"Manual takeoff first. Keep this app in the foreground. Stop releases AI flight control; DJI return-to-home continues until the pilot cancels it with the controller."; [stack addArrangedSubview:hint];
+    self.stopButton=[self button:@"STOP AI • return control to pilot" selector:@selector(stop) color:UIColor.systemRedColor]; [stack addArrangedSubview:self.stopButton];
+    UILabel *hint=[UILabel new]; hint.numberOfLines=0; hint.font=[UIFont systemFontOfSize:12]; hint.text=@"Use Take off here, then climb with the RC to 5–30 m before enabling AI flight. Keep this app in the foreground. STOP also requests cancellation during takeoff. Otherwise it releases AI flight control; DJI return-to-home continues until the pilot cancels it with the controller."; [stack addArrangedSubview:hint];
     self.logView=[UITextView new]; self.logView.editable=NO; self.logView.font=[UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightRegular];
     self.logView.backgroundColor=UIColor.secondarySystemBackgroundColor; [self.logView.heightAnchor constraintEqualToConstant:190].active=YES; [stack addArrangedSubview:self.logView];
     UIApplication.sharedApplication.idleTimerDisabled=YES;
@@ -67,7 +71,7 @@
     self.bridge=[[DroneBridge alloc] initWithPreview:self.preview mock:self.mockSwitch.on];
     __weak typeof(self) weakSelf=self;
     self.bridge.log=^(NSString *s){[weakSelf append:s];};
-    self.bridge.updated=^(NSString *s){weakSelf.status.text=s;};
+    self.bridge.updated=^(NSString *s){weakSelf.status.text=s; NSString *reason=[weakSelf.bridge takeoffProblem]; weakSelf.takeoffButton.enabled=reason==nil; weakSelf.takeoffHelp.text=reason?:@"Ready for pilot takeoff. Confirm locally; AI stays disabled."; [weakSelf.stopButton setTitle:[weakSelf.bridge pilotTakeoffBusy]?@"STOP • cancel takeoff":@"STOP AI • return control to pilot" forState:UIControlStateNormal];};
     [self.bridge start];
 }
 - (void)connect {
@@ -75,6 +79,16 @@
     if(!self.bridge) { [self append:@"Start bridge first"]; return; }
     if([self.bridge.client connect:self.address.text]) [[NSUserDefaults standardUserDefaults] setObject:self.address.text forKey:@"serverURL"];
     else [self append:@"Use a server origin such as http://192.168.1.20:8000 (no path)"];
+}
+- (void)takeoff {
+    [self.view endEditing:YES];
+    if(!self.bridge || self.presentedViewController) return;
+    NSString *problem=[self.bridge takeoffProblem];
+    if(problem) { [self append:problem]; return; }
+    UIAlertController *a=[UIAlertController alertControllerWithTitle:@"Pilot takeoff?" message:@"Confirm the launch area is clear and the pilot has the RC ready. DJI will take off to about 1.2 m. Keep Guardian Angel open: the server connection and ground anchor stay in place. AI flight control stays disabled. Then use the RC to climb to 5-30 m before enabling flight." preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Take off" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){[self.bridge pilotTakeoff];}]];
+    [self presentViewController:a animated:YES completion:nil];
 }
 - (void)camera { [self.bridge armFlight:NO]; }
 - (void)flight {
