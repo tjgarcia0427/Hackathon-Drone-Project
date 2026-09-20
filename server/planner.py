@@ -4,8 +4,8 @@ Two calls:
   plan_mission(fall)                  -> MissionPlan   (once, at dispatch)
   next_search_step(state, frame, det) -> SearchStep    (each loop iteration)
 
-Both use structured outputs so the result is always schema-valid JSON.
-Model defaults to Claude Fable 5.1 (the event's headline model); override with CLAUDE_MODEL.
+Both use structured outputs; deterministic server and iPhone limits still validate results.
+Set CLAUDE_MODEL to a model available to your account; the scaffold default is unverified.
 """
 from __future__ import annotations
 
@@ -19,20 +19,25 @@ from models import DroneState, FallEvent, MissionPlan, SearchStep
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-fable-5-1")
 client = anthropic.Anthropic()
 
-PLANNER_SYSTEM = """You are the mission planner for an autonomous search-and-rescue drone.
-A wearable reported a fall at a GPS point with a given accuracy radius. Produce a search mission
-around that point. Keep altitude modest (15-25m) so a person on the ground is visible to the camera,
-size the search radius to ~3x the GPS accuracy (min 20m), and pitch the gimbal down (-55 to -70)."""
+PLANNER_SYSTEM = """You are the mission planner for a supervised drone observation demo.
+A wearable/Shortcut reports an incident GPS point and accuracy radius. Produce a small search
+mission at that reported point. Use altitude around 10m, a search radius of 5–10m, and gimbal
+pitch -55 to -70 degrees. Explain in the rationale if that small demo radius does not cover
+the reported GPS uncertainty; never claim exhaustive coverage. The server rejects target plus
+search radius outside 35m from launch. The pilot must already have taken off and enabled the
+iPhone locally. Do not plan autonomous takeoff or changes to the safety limits."""
 
-SEARCH_SYSTEM = """You are the search brain of a rescue drone looking for a person who fell.
+SEARCH_SYSTEM = """You are the search brain of a supervised drone observation demo looking for a person who fell.
 Each turn you get the drone's telemetry, the latest camera frame, a local person-detector result,
 and a log of what has already been tried. Decide ONE next action:
-- found: a fallen/lying person is clearly visible (confidence >= 0.8). Stop there.
-- yaw: rotate the camera to look at unexplored bearings (use ~45-90 degree steps).
-- gimbal: change camera pitch (e.g. -30 for distance, -75 for directly below).
-- move: fly up to 15m toward an unexplored area of the search radius.
-- abort: only if the search is hopeless or unsafe.
+- found: a fallen/lying person is clearly visible (confidence >= 0.8). This is a visual candidate for human review.
+- yaw: rotate the camera to look at unexplored bearings (use ~45-90 degree steps, relative -180..180).
+- gimbal: change camera pitch (e.g. -30 for distance, -75 for directly below; range -90..0).
+- move: fly at most 5m toward an unexplored nearby area, compass bearing 0..<360 degrees.
+- abort: if the search is hopeless or unsafe.
 Prefer completing a full yaw sweep before moving. Do not revisit bearings already covered.
+Do not approach a person or assume obstacle clearance from one image. The pilot must keep the path clear.
+The server and iPhone enforce distance, speed and altitude limits independently.
 Be honest in the observation about what you actually see."""
 
 
@@ -101,6 +106,5 @@ def next_search_step(
 
 
 def _raise_on_refusal(resp) -> None:
-    # Fable 5.1 can return HTTP 200 with stop_reason "refusal"; treat as a planner failure.
     if resp.stop_reason == "refusal":
         raise RuntimeError(f"model refused: {getattr(resp, 'stop_details', None)}")
