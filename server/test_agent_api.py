@@ -104,6 +104,32 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict('os.environ', DEV_COMMANDS='1'):
             self.assertEqual((await self.client.post('/dev/cmd',json={'action':'gimbal','pitch':-60})).status_code, 409)
 
+    async def test_lower_altitude_envelope_and_unchanged_move_limit(self):
+        await self.begin()
+        app.S.drone.altitude_m = 1.2
+        self.fresh()
+        _, result = await self.act('move', bearing=0, distance_m=1)
+        self.assertEqual(result.status_code, 202, result.text)
+        await app.S.agent_api.task
+        self.fresh()
+        _, result = await self.act('move', bearing=0, distance_m=5.1)
+        self.assertEqual(result.status_code, 422)
+        app.S.drone.altitude_m = .99
+        self.fresh()
+        _, result = await self.act('move', bearing=0, distance_m=1)
+        self.assertEqual(result.status_code, 409, result.text)
+        self.assertEqual(self.send.await_count, 1)
+
+    async def test_takeoff_authorization_and_diagnostics_are_observable(self):
+        await self.begin()
+        app.S.agent_control.update(takeoff_authorized=1, takeoff_authorization_seconds=250,
+            takeoff_diagnostics={'messages':[{'code':123, 'reason':'test diagnostic'}]},
+            flight_limits={'min_altitude_m':1, 'max_altitude_m':30})
+        observation = await self.observe()
+        self.assertEqual(observation['control']['takeoff_authorized'], 1)
+        self.assertEqual(observation['control']['flight_limits']['min_altitude_m'], 1)
+        self.assertEqual(observation['control']['takeoff_diagnostics']['messages'][0]['code'],123)
+
     async def test_takeoff_routes_request_and_waits_for_ack(self):
         await self.begin()
         gate = asyncio.Event()

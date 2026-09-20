@@ -52,6 +52,10 @@
        [self.testState[@"takeoffBusy"] boolValue]) return @"Takeoff checks do not pass";
     return nil;
 }
+- (void)authorizeAgentTakeoff {
+    if([self takeoffProblem]) return;
+    self.testState[@"agentTakeoffAuthorized"]=@YES; self.testState[@"agentTakeoffSeconds"]=@300;
+}
 - (void)pilotTakeoff {
     if([self takeoffProblem]) return;
     self.takeoffRequests++; self.testState[@"takeoffBusy"]=@YES;
@@ -64,6 +68,7 @@
     if(self.log) self.log(flight?@"MOCK flight enabled":@"Camera commands enabled; flight commands remain disabled");
 }
 - (void)stopAutomation:(NSString *)reason {
+    self.testState[@"agentTakeoffAuthorized"]=@NO;
     self.stopRequests++; self.testState[@"armed"]=@NO; self.testState[@"flightEnabled"]=@NO;
     if(self.log) self.log(reason);
 }

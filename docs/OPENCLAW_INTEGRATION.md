@@ -2,7 +2,7 @@
 
 This adds a dedicated mission agent, a native OpenClaw tool plugin, durable mission notes, and an authenticated agent API. The iPhone remains the DJI flight controller. No firmware changes or Android device are involved.
 
-The server/plugin live on `main`. The matching iPhone confirmation changes also live on `ui-redesign`; that branch remains a separate UI review. If using that phone build, run the **server from current main**. Do not replace main's newer server with the UI branch's older server.
+Use current main for the merged phone UI, server and plugin. Follow [AUTONOMY_TEST.md](AUTONOMY_TEST.md) for the coordinated update and first launch test.
 
 ## What the agent receives and sends
 
@@ -19,11 +19,16 @@ sequenceDiagram
     S-->>O: Actual JPEG + observation ID + timestamps + telemetry + control gates
     O->>S: guardian_request_takeoff(observation ID)
     S->>I: request_takeoff command
-    I->>P: Confirm within 20 seconds?
-    P->>I: Take off
+    alt Live one-use pilot authorization
+        I->>I: Consume authorization and prepare takeoff
+    else No prior authorization
+        I->>P: Confirm within 20 seconds?
+        P->>I: Take off
+    end
     I-->>S: Ack after telemetry confirms hover
     S-->>O: Completed, declined, expired or failed
-    P->>I: RC climb to 5–30 m; Enable flight separately
+    I->>I: If preauthorized, attempt flight enable after stable hover
+    O->>S: Observe again; require flight_enabled
     O->>S: Observe, then one bounded movement/camera tool
     S->>I: Validated command
     I-->>S: Ack after actual completion
@@ -110,11 +115,11 @@ The result should contain an image, observation ID and telemetry. The agent must
 
 For a props-off gimbal test, restart the server with `GA_AGENT_MAX_MODE=camera`; tap **Enable camera** on the phone. Start a camera mission, observe, request gimbal pitch -45°, wait for completion, and observe again. `guardian_stop` releases camera control. Camera mode cannot yaw, move or request takeoff.
 
-For the supervised outdoor trial, restart with `GA_AGENT_MAX_MODE=flight`. Start from a grounded, disarmed phone with strong GPS, ground anchor OK and battery ≥30%. Start a flight mission and call `guardian_request_takeoff` after observing. The pilot must answer the phone prompt within 20 seconds. Once hover is confirmed, the pilot climbs with the RC to 5–30 m and explicitly enables flight. Obtain a new observation, request a 1 m move in a clear direction, check the result, then stop. The takeoff tool cannot perform the RC climb or press Enable flight.
+For the supervised outdoor trial, restart with `GA_AGENT_MAX_MODE=flight`. Start from a grounded, disarmed phone with strong GPS, ground anchor OK and battery ≥30%. Start a flight mission and call `guardian_request_takeoff` after observing. With one-use phone authorization, the request launches and attempts flight enable after stable hover. Otherwise the pilot must answer within 20 seconds and enable flight afterward. Obtain a new observation, request a 1 m move in a clear direction, check the result, then stop. Takeoff completion confirms hover only; require fresh flight-enabled status before movement.
 
 GPS task example (substitute measured coordinates within the local fence):
 
-> Start a supervised flight mission to latitude LAT, longitude LNG at 10 m. Request takeoff only if I ask and the pilot confirms on the phone. Once the pilot has enabled flight, navigate to the mission coordinates, inspect the scene for a person wearing a blue shirt, save possible candidates for review, hold, and report back. Stop on any error or missing fresh observation.
+> Start a supervised flight mission to latitude LAT, longitude LNG at 10 m. Request takeoff once using the pilot's current phone authorization. Once fresh status confirms flight enabled, navigate to the mission coordinates, inspect the scene for a person wearing a blue shirt, save possible candidates for review, hold, and report back. Stop on any error or missing fresh observation.
 
 For a search without a GPS target, omit the coordinates; the agent can inspect, adjust gimbal, yaw and make bounded moves. `guardian_navigate` is unavailable until a mission has a pinned target. It cannot substitute a coordinate inferred from image text.
 
@@ -131,7 +136,7 @@ This version is **operator-started**: a Watch alert is an inbox item, not an aut
 | `guardian_status` | Connection, control gates, recent Watch alerts; no control lease renewal |
 | `guardian_begin` | Objective, mode, optional measured target/Watch event; exclusive mission |
 | `guardian_observe` | JPEG image block, observation ID, fresh telemetry, control state and recent memory |
-| `guardian_request_takeoff` | Local pilot confirmation → DJI launch → confirmed hover result |
+| `guardian_request_takeoff` | One-use authorization or pilot confirmation → DJI launch → confirmed hover; observe flight-enable status |
 | `guardian_navigate` | Existing mission GPS target and altitude, validated against fresh phone anchor |
 | `guardian_move`, `guardian_yaw`, `guardian_gimbal` | Bounded movement/relative yaw/camera pitch |
 | `guardian_hold`, `guardian_return_home` | Settled hold or DJI RTH; RTH completion means landing acknowledgement |
@@ -143,7 +148,7 @@ The tool wrapper keeps the bearer token and mission lease outside the model's co
 
 Leases expire after **90 seconds** without an owning operation. Missions have a **10 minute** limit and **12** takeoff/navigation/movement/camera actions. Hold/RTH/candidate records do not consume that movement budget; the total action-record cap is 50. Expiry, reset, aircraft disconnect or cancelled action releases control and requires a new supervised mission. Restarting OpenClaw/server never restores authority from memory. STOP does not stop motors or cancel DJI's own RTH.
 
-Observations expire after **30 seconds**, and images must be received within **3 seconds** when observed. An action invalidates all earlier observations; the next image must arrive after completion. Visual move/yaw requires that image, fresh current navigation, and no significant pose change (2 m position, 1 m altitude, 5° heading, 3° gimbal). GPS navigation uses the pinned objective and current telemetry. The server restricts agent flight to **35 m** from the **fresh phone anchor**, altitude **5–30 m**, battery ≥30%, and moves ≤5 m; the phone independently enforces its existing control limits. This provides no obstacle/terrain avoidance.
+Observations expire after **30 seconds**, and images must be received within **3 seconds** when observed. An action invalidates all earlier observations; the next image must arrive after completion. Visual move/yaw requires that image, fresh current navigation, and no significant pose change (2 m position, 1 m altitude, 5° heading, 3° gimbal). GPS navigation uses the pinned objective and current telemetry. The server restricts agent flight to **35 m** from the **fresh phone anchor**, altitude **1–30 m**, battery ≥30%, and moves ≤5 m; the phone independently enforces its existing control limits. This provides no obstacle/terrain avoidance.
 
 Mission memory is stored under `server/data/agent/` (Git-ignored), or `GA_AGENT_MEMORY_DIR`: UUID-named JSON journals, compact agent notes, and JPEGs for reported candidates. Each observation includes the last 16 mission events; full archived memory is available by mission ID. OpenClaw also retains its normal conversation context. No hidden autonomous memory service is created. Old coordinates are history, never current telemetry. Candidate confidence is a model assessment, not a verified identity, fall diagnosis, or exact person's GPS location. Candidate JPEG evidence is saved on disk and its metadata appears in the agent result; the dashboard logs the report but does not draw new agent candidate overlays.
 

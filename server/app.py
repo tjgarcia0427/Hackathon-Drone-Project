@@ -362,8 +362,8 @@ async def dispatch() -> dict:
         raise HTTPException(409, "already dispatched")
     if not iphone_telemetry_ready():
         raise HTTPException(409, "fresh aircraft telemetry required")
-    if S.home is None or not (5 <= S.plan.altitude_m <= 30) or safety.haversine_m(*S.home, S.plan.target_lat, S.plan.target_lng) > 35:
-        raise HTTPException(400, "iPhone demo requires target within 35 m of launch and altitude 5..30 m")
+    if S.home is None or not (safety.LIMITS["min_altitude_m"] <= S.plan.altitude_m <= safety.LIMITS["max_altitude_m"]) or safety.haversine_m(*S.home, S.plan.target_lat, S.plan.target_lng) > 35:
+        raise HTTPException(400, "iPhone demo requires target within 35 m of launch and altitude 1..30 m above takeoff")
     verdict = safety.check_mission(S.plan, *S.home, S.drone)
     if not verdict.ok:
         raise HTTPException(400, verdict.reason)

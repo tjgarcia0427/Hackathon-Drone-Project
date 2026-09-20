@@ -33,7 +33,7 @@ class MissionPlan(BaseModel):
     target_lat: float
     target_lng: float
     search_radius_m: float = Field(ge=5, le=120)
-    altitude_m: float = Field(ge=5, le=60)
+    altitude_m: float = Field(ge=1, le=30)
     pattern: Literal["expanding_square", "spiral", "grid"] = "expanding_square"
     gimbal_pitch_deg: float = Field(-60, ge=-90, le=0)
     rationale: str

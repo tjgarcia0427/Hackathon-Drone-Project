@@ -1,6 +1,8 @@
 #ifndef GA_NAVIGATION_H
 #define GA_NAVIGATION_H
 #include <stdbool.h>
+#define GA_MIN_ALTITUDE_M 1.0
+#define GA_MAX_ALTITUDE_M 30.0
 #define GA_MAX_SPEED_MPS 1.0  // horizontal speed cap applied by GANavigate
 typedef struct { double lat, lon, altitude, heading; } GAPose;
 typedef struct { double north, east, up, yaw; bool arrived; } GAControl;

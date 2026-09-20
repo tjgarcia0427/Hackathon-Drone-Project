@@ -19,6 +19,14 @@ assert diagnostic in baseline
 baseline=baseline.replace(diagnostic,'')
 assert 'Video feed:' not in current
 
+# Explicitly authorized one-use launch and 1 m floor. Native/SDK-seam tests cover these.
+current=re.sub(r'// BEGIN autonomy methods\..*?// END autonomy methods\.\n\n','',current,count=1,flags=re.S)
+current=re.sub(r'^.*// autonomy integration\n','',current,flags=re.M)
+current=current.replace(',DJIBaseProductDelegate>','>')
+current=current.replace('Aircraft must take off before enabling flight (1–30 m above takeoff)','Pilot must use Take off or the RC, then climb to 5–30 m')
+current=current.replace('1–30 m relative altitude','5–30 m relative altitude').replace('1..30 m','5..30 m')
+current=current.replace('Number(cmd,@"alt",GA_MIN_ALTITUDE_M,GA_MAX_ALTITUDE_M,&c)','Number(cmd,@"alt",5,30,&c)')
+
 # App-switch recovery is explicitly authorized and has native policy tests.
 current=re.sub(r'^ *// BEGIN airborne anchor recovery\..*?^ *// END airborne anchor recovery\.\n','',current,count=1,flags=re.S|re.M)
 current=current.replace('#import "GroundAnchor.h" // airborne anchor recovery\n','')

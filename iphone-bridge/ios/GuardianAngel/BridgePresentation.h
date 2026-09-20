@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #include <math.h>
+#import "Navigation.h"
 
 // Presentation decisions only. DroneBridge independently validates every arm request.
 typedef NS_ENUM(NSInteger, GAOpState) {
@@ -28,5 +29,5 @@ static inline BOOL GACanConfirmFlight(NSDictionary *t) {
     if(![t[@"telemetryFresh"] boolValue] || ![t[@"positionFresh"] boolValue] || ![t[@"batteryFresh"] boolValue] ||
        ![t[@"gps"] boolValue] || ![t[@"homeSet"] boolValue] || ![t[@"flying"] boolValue]) return NO;
     double battery=[t[@"battery"] doubleValue], altitude=[t[@"altitude"] doubleValue], distance=[t[@"distanceFromHome"] doubleValue];
-    return isfinite(battery) && battery>=30 && isfinite(altitude) && altitude>=5 && altitude<=30 && isfinite(distance) && distance>=0 && distance<=40;
+    return isfinite(battery) && battery>=30 && isfinite(altitude) && altitude>=GA_MIN_ALTITUDE_M && altitude<=GA_MAX_ALTITUDE_M && isfinite(distance) && distance>=0 && distance<=40;
 }

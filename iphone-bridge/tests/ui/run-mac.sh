@@ -25,7 +25,7 @@ device="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; 
 xcrun simctl boot "$device" || true
 xcrun simctl bootstatus "$device" -b
 xcrun simctl install "$device" "$app"
-for scenario in agent-takeoff-prompt takeoff-ready takeoff-confirm takeoff-pending flow not-started offline camera procedure flight pending release-failed returning low-battery stale gps-waiting modal log; do
+for scenario in agent-authorization agent-takeoff-prompt takeoff-ready takeoff-confirm takeoff-pending flow not-started offline camera procedure flight pending release-failed returning low-battery stale gps-waiting modal log; do
   xcrun simctl terminate "$device" com.guardianangel.ui-smoke >/dev/null 2>&1 || true
   data="$(xcrun simctl get_app_container "$device" com.guardianangel.ui-smoke data)"
   rm -f "$data/Documents/ui-result.json"

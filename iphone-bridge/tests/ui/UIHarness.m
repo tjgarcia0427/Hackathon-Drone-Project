@@ -40,6 +40,23 @@ static void Run(void) {
     NSMutableDictionary *state=[bridge valueForKey:@"testState"];
     if(![scenario isEqual:@"offline"]) Click(root,@"connectButton");
     Invoke(root,@"refreshState");
+    if([scenario isEqual:@"agent-authorization"]) {
+        state[@"flying"]=@NO; state[@"altitude"]=@0; state[@"displayAltitude"]=@0;
+        Invoke(root,@"refreshState"); Click(root,@"authorizeTakeoffButton");
+        Later(^{
+            Check([root.presentedViewController.title isEqual:@"Authorize one agent launch?"],@"Local permission must be explicit");
+            Check(![state[@"agentTakeoffAuthorized"] boolValue],@"Opening prompt must not grant permission");
+            Check([[bridge valueForKey:@"takeoffRequests"] integerValue]==0,@"Authorization must not immediately launch");
+            [root dismissViewControllerAnimated:NO completion:^{
+                [bridge authorizeAgentTakeoff]; Invoke(root,@"refreshState");
+                Check([state[@"agentTakeoffAuthorized"] boolValue],@"Authorized state must be shown");
+                Click(root,@"authorizeTakeoffButton"); Invoke(root,@"refreshState");
+                Check(![state[@"agentTakeoffAuthorized"] boolValue],@"Second tap revokes permission");
+                Check(bridge.client.connected && [state[@"homeSet"] boolValue],@"Revocation preserves link and anchor");
+                Result(YES,@"Agent authorization prompt, countdown state and revocation passed");
+            }];
+        }); return;
+    }
     if([scenario isEqual:@"agent-takeoff-prompt"]) {
         __block NSUInteger responses=0;
         Check(bridge.takeoffPrompt!=nil,@"Agent takeoff prompt must be wired");

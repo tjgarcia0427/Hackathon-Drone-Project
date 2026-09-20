@@ -39,7 +39,7 @@ The five-Hz schedule sends the latest SDK observations; sensor timing and connec
 
 Coordinates use decimal degrees. Altitude is metres relative to takeoff, not altitude above terrain or sea level. Heading/bearing is compass degrees clockwise from north. Bridge status is `idle`, `searching` while a command is active, or `rtl`; it does not attest that the phone is armed. Arm/disarm state is shown locally on the iPhone; updated phones also report it in the `control` object below.
 
-The phone records home from valid GPS while on the ground. Start the bridge before takeoff. The local **Take off (pilot)** button retains that anchor and the server connection; the agent protocol can request that same local confirmation but cannot launch without the pilot. See [pilot takeoff](PILOT_TAKEOFF.md). The server uses `home_latitude`/`home_longitude`, falling back to the first telemetry coordinates for the older simulator. Restart the server when changing launch location or switching mock/live; resetting a mission does not reset its home reference.
+The phone records home from valid GPS while on the ground. Start the bridge before takeoff. The local **Take off (pilot)** button retains that anchor and the server connection; the agent protocol can request that same local confirmation or consume a live one-use local pilot authorization. See [pilot takeoff](PILOT_TAKEOFF.md). The server uses `home_latitude`/`home_longitude`, falling back to the first telemetry coordinates for the older simulator. Restart the server when changing launch location or switching mock/live; resetting a mission does not reset its home reference.
 
 Completion acknowledgments:
 
@@ -65,7 +65,8 @@ The timestamp above illustrates the shape only: generate `expires_at_ms` as curr
 
 | Action | Parameters | Actual iPhone behavior |
 |---|---|---|
-| `goto` | `lat`, `lng`, `alt` (5–30 m) | Fly to a GPS target using virtual-stick velocity control; no takeoff action |
+| `request_takeoff` | none; delivery expiry required | Consume live one-use pilot authorization, or show 20-second pilot prompt. Ack means stable hover; require fresh flight-enabled status before movement. |
+| `goto` | `lat`, `lng`, `alt` (1–30 m) | Fly to a GPS target using virtual-stick velocity control; no takeoff action |
 | `move` | `bearing` (0..<360), `dist` (0–5 m) | Compute a nearby target from current telemetry, then use the same navigation controller |
 | `yaw` | `deg` (relative −180..180) | Rotate toward current heading plus offset, at most 10°/s |
 | `gimbal` | `pitch` (absolute −90..0) | SDK gimbal rotation; completion checked from fresh gimbal telemetry |
@@ -77,7 +78,8 @@ One normal action is active at a time. `hold`/`rtl` may preempt another action; 
 
 Most positive acknowledgments require telemetry convergence and one second of settling. RTH success means landing was observed after SDK acceptance, not just that the request was accepted. Landing may require pilot confirmation. `stop` is the exception: its positive acknowledgment means the release request was processed; it does not prove the SDK completed release. The app logs release failures and blocks re-arming until release succeeds.
 
-| Deadline | `goto` | `rtl` | Other normal commands |
+| Deadline | `request_takeoff` | none; delivery expiry required | Consume live one-use pilot authorization, or show 20-second pilot prompt. Ack means stable hover; require fresh flight-enabled status before movement. |
+| `goto` | `rtl` | Other normal commands |
 |---|---:|---:|---:|
 | Server completion wait | 120 s | 180 s | 25 s |
 | iPhone completion wait | 110 s | 170 s | 23 s |
@@ -88,9 +90,9 @@ The server allows up to 3 s to send a command. A negative acknowledgment, discon
 
 ## Limits and interruptions
 
-The server safety layer checks target plus planned search radius within 35 m of launch, movement endpoints within 35 m, altitude 5–30 m, moves ≤5 m, and battery ≥30%. Planner guidance requests about 10 m altitude and a 5–10 m demo search radius; large incident uncertainty may exceed the demonstrated area.
+The server safety layer checks target plus planned search radius within 35 m of launch, movement endpoints within 35 m, altitude 1–30 m, moves ≤5 m, and battery ≥30%. Planner guidance requests about 10 m altitude and a 5–10 m demo search radius; large incident uncertainty may exceed the demonstrated area.
 
-The phone independently enforces a 40 m ground-anchor radius, altitude 5–30 m, horizontal velocity ≤1 m/s and vertical velocity ≤0.5 m/s. It requests release/disarms on monitored heartbeat loss (>4 s), stale FC data (>1.5 s), stale battery (>5 s), GPS loss, battery below 25%, foreground loss, unavailable virtual stick, a loop stall >0.6 s, or leaving its envelope. It requires ≥30% battery for flight enable/new navigation.
+The phone independently enforces a 40 m ground-anchor radius, altitude 1–30 m, horizontal velocity ≤1 m/s and vertical velocity ≤0.5 m/s. It requests release/disarms on monitored heartbeat loss (>4 s), stale FC data (>1.5 s), stale battery (>5 s), GPS loss, battery below 25%, foreground loss, unavailable virtual stick, a loop stall >0.6 s, or leaving its envelope. It requires ≥30% battery for flight enable/new navigation.
 
 These are application checks, not obstacle avoidance or a guaranteed watchdog after force-kill/cable loss. Pilot-operated takeoff, clear paths, DJI failsafes and pilot takeover remain part of the demo.
 
@@ -175,3 +177,7 @@ New wire action: `request_takeoff`, with `cmd_id` and mandatory `expires_at_ms`.
 Agent HTTP routes require `Authorization: Bearer <GA_AGENT_TOKEN>`: GET `/agent/status`, POST `/agent/mission`, POST `/agent/observation`, POST `/agent/action`, POST `/agent/actions/{UUID}/wait`, POST `/agent/memory`, GET `/agent/memory/{UUID}`, POST `/agent/release` and POST `/agent/stop`. `/docs` exposes exact request schemas. `mission` returns a private lease; subsequent owning requests carry `mission_id` and `lease`. An action also carries an `action_id` and `observation_id`. Responses to accepted actions are initially `pending`; poll/wait for `completed`, `failed` or `cancelled`. HTTP 202 alone is not physical completion.
 
 `/agent/release` can clean up only its matching mission; `/agent/stop` is the explicit authenticated operator/agent stop-all endpoint. Old leases cannot regain control after disconnect, reset, expiry or restart. Existing dashboard reset/abort can release agent control. See [OpenClaw integration](OPENCLAW_INTEGRATION.md) for limits, Watch routing, memory and deployment.
+
+## Agent launch control status
+
+Phone `control` now includes `takeoff_authorized`, `takeoff_authorization_seconds`, `takeoff_auto_enable_pending`, `takeoff_last_error`, `takeoff_diagnostics` and `flight_limits`. These are observations, not a remote authorization API. Authorization expires after five minutes, is consumed once, and is cleared by STOP/disconnect/inactivity/restart. The existing 65-second request wait includes the optional 20-second prompt and up to 30 seconds for preparation/hover. Success confirms hover, not virtual-stick enable. See [AUTONOMY_TEST.md](AUTONOMY_TEST.md).

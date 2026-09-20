@@ -104,7 +104,7 @@ Run `python -m unittest discover -s . -p "test_*.py" -v` from `server/` for prov
 2. **Server-only simulation:** run `python sim_drone.py` from `server/` in another terminal. Use the dashboard's development incident and dispatch controls. This checks the existing server workflow without DJI hardware; it does not validate the iPhone.
 3. **iPhone mock mode:** build/install the app, then follow the mock-only smoke server instructions in the bridge README. This separate server makes no AI calls. Check camera uploads, command acknowledgments, movement math, STOP and reconnect. It rejects live hardware.
 4. **Bench connection:** stop the simulator/smoke server, start the project server, remove propellers, and verify DJI registration, telemetry, decoded camera preview and camera-only gimbal control.
-5. **Supervised flight:** record a valid ground GPS anchor in the bridge, use **Take off (pilot)** in Guardian Angel (or take off with the RC), then climb with the RC into the 5–30 m demo envelope, enable flight locally, and verify short commands and physical takeover before dispatching an incident mission.
+5. **Supervised flight:** record a valid ground GPS anchor in the bridge, use **Take off (pilot)** in Guardian Angel (or take off with the RC), then enable flight within 1–30 m above takeoff, and verify short commands and physical takeover before dispatching an incident mission.
 
 Only one drone connection is allowed. Stop `sim_drone.py` before connecting the iPhone. Restart the project server when switching mock/live or changing launch locations, because the home anchor persists for that server session.
 
@@ -116,11 +116,15 @@ The native Watch uses `/watch/status` and `/watch/alerts`, with deduplication an
 
 Those sample coordinates are for the simulator/iPhone mock start at `25.7617,-80.1918`; replace them with the real, nearby demo location for hardware testing.
 
+## One-use agent launch
+
+Rebuild the phone from current main, restart the server and refresh the OpenClaw plugin/workspace. On the grounded, connected phone, tap **Authorize one agent launch**. The agent can consume this five-minute, one-use permission to take off and attempt flight enable after stable hover. Movement requires fresh flight-enabled status. STOP, disconnect or app inactivity revokes permission. See [the first-test guide and -1008 diagnostics](docs/AUTONOMY_TEST.md).
+
 ## Operating envelope
 
 The planner requests roughly 10 m altitude, a 5–10 m demo search radius, and moves of at most 5 m. The server requires target plus search radius within 35 m of home; each move endpoint must remain within 35 m. Use an incident within about 20 m of launch. A small demonstration radius may not cover the full GPS uncertainty and is not an exhaustive rescue search.
 
-The iPhone independently enforces a 40 m ground-anchor radius, 5–30 m relative altitude, 1 m/s horizontal and 0.5 m/s vertical speed, and a 10°/s yaw rate. It requires 30% battery to enable/new navigation and releases control below 25% or when monitored telemetry/link/lifecycle checks fail. These checks do not provide obstacle or terrain avoidance.
+The iPhone independently enforces a 40 m ground-anchor radius, 1–30 m relative altitude, 1 m/s horizontal and 0.5 m/s vertical speed, and a 10°/s yaw rate. It requires 30% battery to enable/new navigation and releases control below 25% or when monitored telemetry/link/lifecycle checks fail. These checks do not provide obstacle or terrain avoidance.
 
 **STOP AI requests release of app flight control. It does not stop motors or cancel DJI-managed return-to-home.** RTH uses the aircraft's configured home and altitude, which can extend outside the app's virtual-stick envelope. The pilot checks those settings before launch and uses the RC to cancel RTH or take over. Force-killing/suspending iOS or losing the cable cannot be made safe by an app-only watchdog; aircraft failsafes and pilot supervision remain required.
 

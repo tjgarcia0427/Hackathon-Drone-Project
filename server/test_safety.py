@@ -14,7 +14,10 @@ class IPhoneSafetyTests(unittest.TestCase):
 
     def test_nearby_plan_and_altitude_bounds(self):
         self.assertTrue(safety.check_mission(self.plan, *self.home, self.drone).ok)
-        for altitude in (4.9, 30.1, math.nan, math.inf):
+        for altitude in (1.0, 1.2, 30.0):
+            self.plan.altitude_m = altitude
+            self.assertTrue(safety.check_mission(self.plan, *self.home, self.drone).ok)
+        for altitude in (.99, 30.1, math.nan, math.inf):
             self.plan.altitude_m = altitude
             self.assertFalse(safety.check_mission(self.plan, *self.home, self.drone).ok)
 

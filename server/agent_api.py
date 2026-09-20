@@ -50,7 +50,7 @@ class Act(Owned):
     action_id: UUID
     observation_id: UUID
     action: Literal["request_takeoff", "navigate", "move", "yaw", "gimbal", "hold", "return_home", "report_candidate"]
-    altitude_m: Optional[float] = Field(None, ge=5, le=30, strict=True)
+    altitude_m: Optional[float] = Field(None, ge=1, le=30, strict=True)
     bearing: Optional[float] = Field(None, ge=0, lt=360, strict=True)
     distance_m: Optional[float] = Field(None, ge=0, le=5, strict=True)
     degrees: Optional[float] = Field(None, ge=-180, le=180, strict=True)
@@ -272,7 +272,7 @@ class Controller:
             return "hold", {}, 25, observation
         if action == "return_home":
             return "rtl", {}, 180, observation
-        if not 5 <= d.altitude_m <= 30 or d.battery_pct < 30 or safety.haversine_m(*home, d.latitude, d.longitude) > 35:
+        if not safety.LIMITS["min_altitude_m"] <= d.altitude_m <= safety.LIMITS["max_altitude_m"] or d.battery_pct < 30 or safety.haversine_m(*home, d.latitude, d.longitude) > 35:
             raise HTTPException(409, "Aircraft outside agent flight envelope")
         old = observation["public"]["navigation"]
         if not old or safety.haversine_m(old["latitude"], old["longitude"], d.latitude, d.longitude) > 2 or abs(old["altitude_m"]-d.altitude_m) > 1 or abs((old["heading_deg"]-d.heading_deg+180)%360-180) > 5 or abs(old["gimbal_pitch_deg"]-d.gimbal_pitch_deg) > 3:

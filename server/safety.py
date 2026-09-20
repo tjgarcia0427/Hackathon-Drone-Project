@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from models import DroneState, MissionPlan, SearchStep, valid_bbox
 
 LIMITS = {
+    "min_altitude_m": 1.0,
     "max_altitude_m": 30.0,
     "max_radius_from_home_m": 35.0,   # leaves margin inside the iPhone's 40 m fence
     "min_battery_pct": 30.0,
@@ -50,8 +51,8 @@ def check_mission(plan: MissionPlan, home_lat: float, home_lng: float, drone: Dr
     if not (-85 < home_lat < 85 and -85 < plan.target_lat < 85 and
             -180 <= home_lng <= 180 and -180 <= plan.target_lng <= 180):
         return Verdict(False, "coordinates outside demo navigation range")
-    if not 5 <= plan.altitude_m <= LIMITS["max_altitude_m"]:
-        return Verdict(False, "altitude must be 5–30 m")
+    if not LIMITS["min_altitude_m"] <= plan.altitude_m <= LIMITS["max_altitude_m"]:
+        return Verdict(False, "altitude must be 1–30 m above takeoff")
     if plan.search_radius_m < 5 or not -90 <= plan.gimbal_pitch_deg <= 0:
         return Verdict(False, "invalid search radius or gimbal pitch")
     d = haversine_m(home_lat, home_lng, plan.target_lat, plan.target_lng)

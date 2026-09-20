@@ -20,7 +20,7 @@ bool GAValidPose(GAPose p) {
         && fabs(p.lat)<=90 && fabs(p.lon)<=180;
 }
 bool GAInsideFence(GAPose p, GAPose home) {
-    return GAValidPose(p)&&GAValidPose(home)&&p.altitude>=5&&p.altitude<=30
+    return GAValidPose(p)&&GAValidPose(home)&&p.altitude>=GA_MIN_ALTITUDE_M&&p.altitude<=GA_MAX_ALTITUDE_M
         && GADistance(p.lat,p.lon,home.lat,home.lon)<=40;
 }
 GAControl GANavigate(GAPose p, GAPose target) {

@@ -20,11 +20,13 @@ prelude = r'''
 #import <dispatch/dispatch.h>
 #include <assert.h>
 #import "PilotTakeoff.h"
+#import "Navigation.h"
 static double clockTime=100;
 static double CACurrentMediaTime(void) { return clockTime; }
 static void Main(dispatch_block_t block) { block(); }
 @interface RequestBridge : NSObject {
     double _takeoffPromptDeadline;
+    GATakeoffPermit _takeoffPermit; BOOL _enableAfterTakeoff, _enabling;
     GATakeoff _pilotTakeoff;
     BOOL _armed, _flightEnabled, _homeSet;
     struct { double lat,lon; } _home;
@@ -32,7 +34,7 @@ static void Main(dispatch_block_t block) { block(); }
 @property(nonatomic,strong) NSDictionary *remoteTakeoff;
 @property(nonatomic,copy) void (^takeoffPrompt)(NSString *, void (^)(BOOL));
 @property(nonatomic,copy) void (^dismissTakeoffPrompt)(void);
-@property(nonatomic,copy) NSString *problem;
+@property(nonatomic,copy) NSString *problem, *lastTakeoffError;
 @property(nonatomic) NSUInteger launches, acknowledgments, prompts, dismissals;
 @property(nonatomic) BOOL acknowledgedOK;
 @property(nonatomic,copy) NSString *error;
@@ -40,11 +42,15 @@ static void Main(dispatch_block_t block) { block(); }
 - (void)finishTakeoffRequest:(BOOL)ok error:(NSString *)error;
 - (void)updateTakeoffRequest;
 - (void)rejectSDK;
+- (NSDictionary *)agentControlStatus;
+- (void)permit;
 @end
 // Production methods name their own class in the weak callback.
 #define DroneBridge RequestBridge
 @implementation RequestBridge
 - (void)note:(NSString *)message {}
+- (NSDictionary *)takeoffDiagnostics { return @{}; }
+- (void)permit { _takeoffPermit=(GATakeoffPermit){clockTime+300}; }
 - (NSString *)takeoffProblem { return _takeoffPromptDeadline?@"Answer pending prompt":self.problem; }
 - (void)pilotTakeoff { self.launches++; GATakeoffBegin(&_pilotTakeoff,clockTime); }
 - (void)rejectSDK { GATakeoffStartResult(&_pilotTakeoff,true); }
@@ -103,6 +109,19 @@ int main(void) { @autoreleasepool {
     [b requestPilotTakeoff:Command(@"nine")];
     assert(b.prompts==1 && b.acknowledgments==1 && !b.acknowledgedOK);
     assert([b.remoteTakeoff[@"cmd_id"] isEqual:@"eight"]);
+    b=make(); [b permit];
+    assert([[b agentControlStatus][@"takeoff_authorized"] boolValue]);
+    [b requestPilotTakeoff:Command(@"authorized")];
+    assert(b.launches==1 && b.prompts==0 && b.acknowledgments==0);
+    assert(![[b agentControlStatus][@"takeoff_authorized"] boolValue]);
+    assert([[b agentControlStatus][@"takeoff_auto_enable_pending"] boolValue]);
+    [b requestPilotTakeoff:Command(@"authorized")]; assert(b.launches==1);
+    [b finishTakeoffRequest:NO error:@"STOP"];
+    assert(![[b agentControlStatus][@"takeoff_auto_enable_pending"] boolValue]);
+    b=make(); [b permit]; clockTime+=300;
+    [b requestPilotTakeoff:Command(@"expired-permit")]; assert(b.launches==0 && b.prompts==1);
+    b=make(); [b permit]; b.problem=@"GPS lost";
+    [b requestPilotTakeoff:Command(@"unsafe-permit")]; assert(b.launches==0 && !b.acknowledgedOK);
     answer= nil;
     puts("Production agent takeoff request: approval, expiry, revalidation, deduplication, STOP and SDK rejection passed.");
 } return 0; }

@@ -17,6 +17,8 @@
 - (NSString *)takeoffProblem;
 - (BOOL)pilotTakeoffBusy;
 - (void)pilotTakeoff;
+// Local pilot-only one-use permission; no remote authorization endpoint.
+- (void)authorizeAgentTakeoff;
 - (void)armFlight:(BOOL)flight;
 - (void)stopAutomation:(NSString *)reason;
 - (void)shutdown;

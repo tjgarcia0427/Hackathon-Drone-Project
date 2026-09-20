@@ -106,7 +106,7 @@ The integrated server changes add:
 - A 10-second maximum age for the frame underlying a planner decision.
 - One drone connection at a time, prompt pending-command failure on disconnect, and the app's recorded ground anchor for home.
 - Mission cancellation on disconnect and frame-generation checks that discard images still processing across reset/reconnection.
-- Dispatch rejection for targets beyond 35 m or altitude outside 5–30 m.
+- Dispatch rejection for targets beyond 35 m or altitude outside 1–30 m.
 
 Keep **AUTO_DISPATCH=0** for the demo. The repository planner guidance now requests altitude around 10 m, a 5–10 m demo search radius, and relative moves of at most 5 m. Server safety uses a 35 m radius; the target plus planned search radius must fit inside it. Keep the demo incident within about 20 m of launch. The search radius may not cover the incident's full GPS uncertainty; this limitation must remain visible to the operator. The app deliberately rejects plans outside its local limits; it does not silently change them. Stop `sim_drone.py` when the iPhone is connected. Restart the server when changing launch locations or switching between mock and real aircraft so its home reference is not reused.
 
@@ -123,7 +123,7 @@ See [UI handoff and regression](../docs/IPHONE_UI_HANDOFF.md). Camera-only contr
 1. Initially remove propellers. Close DJI Fly, turn **Mock hardware off before Start bridge**, and connect aircraft, controller and iPhone. The first DJI registration requires internet access.
 2. Verify registration, correct aircraft model, battery updates, and live preview. Tap **Arm camera only** and test a gimbal command through your server. The full existing mission begins with `goto`, so it will correctly fail while camera-only control is enabled; use a targeted gimbal test for this milestone.
 3. For flight testing, the pilot configures/checks normal aircraft failsafes and RTH height in DJI Fly beforehand, then closes DJI Fly. Start the bridge on the ground in an open outdoor area and wait for **GPS OK / Ground anchor OK**. Keep the app open and connected.
-4. Press **STOP AI** if camera-only mode is armed. Tap **Take off (pilot)** and confirm locally. Stay in Guardian Angel: the server connection, video and ground anchor remain intact through the approximately 1.2 m DJI takeoff. Wait for the hover confirmation, then use the RC to climb to **5–30 m** near launch. Takeoff does not enable AI control. See [pilot takeoff](../docs/PILOT_TAKEOFF.md) for launch gates, interruptions and testing. Controller takeoff remains an alternative.
+4. Press **STOP AI** if camera-only mode is armed. Tap **Take off (pilot)** and confirm locally. Stay in Guardian Angel: the server connection, video and ground anchor remain intact through the approximately 1.2 m DJI takeoff. Wait for the hover confirmation, then enable flight when within **1–30 m above takeoff** near launch. Takeoff does not enable AI control. See [pilot takeoff](../docs/PILOT_TAKEOFF.md) for launch gates, interruptions and testing. Controller takeoff remains an alternative.
 5. Tap **STOP AI** if camera-only mode was previously enabled, then **Enable flight** locally. Confirm the on-screen state. Test a small yaw, hold, then a short move with a clear flight path before attempting a server mission.
 6. Test local STOP and loss of server connection. Confirm the pilot can take over using the RC. Then try a supervised incident → dispatch → camera search demonstration.
 
@@ -134,7 +134,7 @@ The app's GPS velocity controller does not plan around obstacles or terrain. A 4
 | Capability | Behavior |
 |---|---|
 | Telemetry | Navigation plus independent altitude/heading/battery observations; about 5 Hz. See [telemetry fix](../docs/TELEMETRY_FIX.md) |
-| Pilot takeoff | Local button + confirmation; DJI takeoff to about 1.2 m; server/anchor retained; no server takeoff command |
+| Pilot takeoff | Local button + confirmation; DJI takeoff to about 1.2 m; server/anchor retained; agent request supported with one-use pilot authorization or local confirmation |
 | Camera | DJIWidget preview; next-rendered-frame snapshots, JPEG downscaling, about 1 upload/sec without an upload queue |
 | `gimbal` | Absolute pitch −90° to 0°, completion checked against gimbal telemetry |
 | `yaw` | Relative rotation −180° to 180°, capped at 10°/sec, telemetry-based completion |
@@ -143,13 +143,13 @@ The app's GPS velocity controller does not plan around obstacles or terrain. A 4
 | `hold` | Zero virtual-stick commands until measured velocity settles; keeps flight enabled |
 | `rtl` | Releases virtual stick, invokes DJI return-to-home, waits for landing before positive acknowledgment |
 | `stop` | Requests cancellation of a pending pilot takeoff, releases AI flight control, disarms the app; acknowledgment means control-release request processed |
-| Local limits | 40 m from ground anchor, 5–30 m altitude, 1 m/sec horizontal, 0.5 m/sec vertical |
+| Local limits | 40 m from ground anchor, 1–30 m altitude, 1 m/sec horizontal, 0.5 m/sec vertical |
 | Interlocks | 30% battery to enable/new navigation; release below 25%, stale GPS/telemetry, link loss, inactive app, or loop delay |
 | Duplicate commands | Last 256 completed IDs are cached for the app session; active duplicates are not re-executed |
 
 Normal movement acknowledgments wait for telemetry convergence and one second of settling. SDK command acceptance is not treated as arrival. RTH may still require the pilot to confirm landing; timeout produces a negative acknowledgment. **STOP does not cancel DJI's own RTH/landing and never stops motors.** Use the physical controller to cancel RTH. If RTH was cancelled manually while airborne, restart/re-establish the bridge on the ground before another automated flight session.
 
-The app's 40 m / 5–30 m limits apply to its virtual-stick navigation. DJI-managed RTH uses the aircraft's configured home point and RTH altitude, which can extend outside those limits; the pilot must check those settings before launch.
+The app's 40 m / 1–30 m limits apply to its virtual-stick navigation. DJI-managed RTH uses the aircraft's configured home point and RTH altitude, which can extend outside those limits; the pilot must check those settings before launch.
 
 There is one active command and a 10 Hz local control loop. The app attempts to zero velocity and relinquish virtual stick when interrupted. An iOS process cannot guarantee a watchdog after force-kill, OS suspension or cable failure; the aircraft/controller's own failsafes and pilot takeover remain necessary. A short already-sent gimbal rotation can finish after STOP.
 
@@ -179,3 +179,7 @@ The three optional FastAPI transport tests require `python -m pip install -r too
 
 API references: [DJI iOS SDK source/sample](https://github.com/dji-sdk/Mobile-SDK-iOS), [DJIWidget](https://github.com/dji-sdk/DJIWidget), [DJI flight controller API](https://developer.dji.com/api-reference/ios-api/Components/FlightController/DJIFlightController.html). Dependency licenses remain applicable; see `THIRD-PARTY-NOTICES.md`.
 
+
+## Current autonomy update
+
+See [the current launch guide and handoff](../docs/AUTONOMY_TEST.md) for the one-use launch permission, 1 m floor, coordinated rebuild/restart steps, diagnostics and tests. Main includes the merged UI. Database expansion remains paused. SDK -1008 still needs hardware evidence.

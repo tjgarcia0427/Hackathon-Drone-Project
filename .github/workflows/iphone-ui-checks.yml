@@ -1,7 +1,7 @@
 name: iPhone UI checks
 on:
   push:
-    branches: [ui-redesign]
+    branches: [main, ui-redesign]
     paths:
       - 'iphone-bridge/**'
       - '.github/workflows/iphone-ui-checks.yml'

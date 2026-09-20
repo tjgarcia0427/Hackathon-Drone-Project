@@ -14,9 +14,10 @@ int main(void) { @autoreleasepool {
     for(NSString *flag in @[@"started",@"serverOnline",@"aircraft",@"telemetryFresh",@"positionFresh",@"batteryFresh",@"gps",@"homeSet",@"flying"]) {
         t[flag]=@NO; assert(!GACanConfirmFlight(t)); t[flag]=@YES;
     }
-    for(NSArray *pair in @[@[@"battery",@29],@[@"altitude",@4.9],@[@"altitude",@30.1],@[@"distanceFromHome",@(-1)],@[@"distanceFromHome",@40.1],@[@"battery",@(NAN)]]) {
+    for(NSArray *pair in @[@[@"battery",@29],@[@"altitude",@0.99],@[@"altitude",@30.1],@[@"distanceFromHome",@(-1)],@[@"distanceFromHome",@40.1],@[@"battery",@(NAN)]]) {
         NSString *key=pair[0]; id previous=t[key]; t[key]=pair[1]; assert(!GACanConfirmFlight(t)); t[key]=previous;
     }
+    t[@"altitude"]=@1.0; assert(GACanConfirmFlight(t)); t[@"altitude"]=@1.2; assert(GACanConfirmFlight(t));
     t[@"flightBlockReason"]=@"Aircraft telemetry is stale"; assert(!GACanConfirmFlight(t)); t[@"flightBlockReason"]=@"";
     t[@"armed"]=@YES; assert(GAStateForTelemetry(t)==GACameraOnly);
     t[@"flightEnabled"]=@YES; assert(GAStateForTelemetry(t)==GAFlight);

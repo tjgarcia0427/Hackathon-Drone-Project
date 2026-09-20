@@ -32,6 +32,8 @@ jobs:
         run: python3 iphone-bridge/tests/check_telemetry_preservation.py
       - name: Test production agent takeoff confirmation methods
         run: python3 iphone-bridge/tests/agent_takeoff_request_test.py
+      - name: Test production SDK takeoff preparation and callbacks
+        run: python3 iphone-bridge/tests/takeoff_sdk_preparation_test.py
       - name: Test airborne anchor recovery
         run: |
           xcrun clang -std=c11 -Wall -Wextra -Werror -Iiphone-bridge/ios/GuardianAngel iphone-bridge/tests/ground_anchor_test.c iphone-bridge/ios/GuardianAngel/Navigation.c -lm -o /tmp/ground_anchor_test

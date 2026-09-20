@@ -15,6 +15,9 @@ int main(void) {
     GAPose high=n; high.altitude=20; c=GANavigate(home,high);
     assert(c.up==0.5 && c.north==0 && c.east==0);
     assert(GAInsideFence(n,home)); assert(!GAInsideFence(GAOffset(home,0,41),home));
+    high.altitude=1.0; assert(GAInsideFence(high,home));
+    high.altitude=1.2; assert(GAInsideFence(high,home));
+    high.altitude=.99; assert(!GAInsideFence(high,home));
     high.altitude=31; assert(!GAInsideFence(high,home));
     high.altitude=NAN; assert(!GAInsideFence(high,home));
     // Integrate bounded velocity commands until arrival from multiple bearings.

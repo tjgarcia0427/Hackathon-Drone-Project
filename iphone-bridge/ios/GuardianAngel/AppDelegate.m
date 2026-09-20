@@ -300,7 +300,7 @@ static UIView *NavyHeader(UIView *content) {
 @property(nonatomic,strong) UITextField *address;
 @property(nonatomic,strong) UISwitch *mockSwitch;
 @property(nonatomic,strong) UIView *mockRow, *commandRow;
-@property(nonatomic,strong) GAButton *startButton, *connectButton, *cameraButton, *flightButton, *stopButton, *takeoffButton;
+@property(nonatomic,strong) GAButton *startButton, *connectButton, *cameraButton, *flightButton, *stopButton, *takeoffButton, *authorizeTakeoffButton;
 @property(nonatomic,strong) UILabel *cameraHelp, *flightHelp, *commandText;
 // log
 @property(nonatomic,strong) UIStackView *logTail;
@@ -350,7 +350,7 @@ static UIView *NavyHeader(UIView *content) {
     [stack addArrangedSubview:[self buildTelemetry]];
     [stack addArrangedSubview:[self buildProcedure]];
     [stack addArrangedSubview:[self buildLog]];
-    UILabel *foot=Label(@"Pilot takeoff required: use Take off here, then climb with the RC to 5–30 m. Keep this app in the foreground. STOP requests takeoff cancellation or releases AI flight control; DJI return-to-home and motor control remain with the aircraft and the pilot's RC. No obstacle or terrain avoidance is provided.",Sans(11,UIFontWeightRegular),GA_SECONDARY);
+    UILabel *foot=Label(@"Pilot takeoff required: use Take off here, or authorize one agent launch. Keep this app in the foreground. STOP requests takeoff cancellation or releases AI flight control; DJI return-to-home and motor control remain with the aircraft and the pilot's RC. No obstacle or terrain avoidance is provided.",Sans(11,UIFontWeightRegular),GA_SECONDARY);
     [stack addArrangedSubview:foot];
     [scroll addSubview:stack];
 
@@ -466,19 +466,21 @@ static UIView *NavyHeader(UIView *content) {
     self.connectButton.accessibilityIdentifier=@"bridge.connect";
     self.takeoffButton=[GAButton primary:@"Take off (pilot)" target:self action:@selector(takeoff)];
     self.takeoffButton.accessibilityIdentifier=@"pilot.takeoff";
+    self.authorizeTakeoffButton=[GAButton primary:@"Authorize one agent launch" target:self action:@selector(authorizeTakeoff)];
+    self.authorizeTakeoffButton.accessibilityIdentifier=@"agent.authorizeTakeoff";
     self.cameraButton=[GAButton primary:@"Arm camera only" target:self action:@selector(camera)];
     self.cameraButton.accessibilityIdentifier=@"bridge.camera";
     self.cameraHelp=Label(@"Optional camera check. Server can tilt the gimbal; aircraft flight stays with the pilot.",Sans(12,UIFontWeightRegular),GA_SECONDARY); self.cameraHelp.textAlignment=NSTextAlignmentCenter;
     self.flightButton=[GAButton primary:@"Enable flight" target:self action:@selector(flight)];
     self.flightButton.accessibilityIdentifier=@"bridge.flight";
-    self.flightHelp=Label(@"Aircraft airborne at 5–30 m, within 40 m of the anchor. Tap Enable flight when ready.",Sans(12,UIFontWeightRegular),GA_SECONDARY); self.flightHelp.textAlignment=NSTextAlignmentCenter;
+    self.flightHelp=Label(@"Aircraft airborne at 1–30 m, within 40 m of the anchor. Tap Enable flight when ready.",Sans(12,UIFontWeightRegular),GA_SECONDARY); self.flightHelp.textAlignment=NSTextAlignmentCenter;
     self.commandRow=[UIView new]; UIStackView *cr=HStack(12);
     UIView *amber=[UIView new]; amber.backgroundColor=GA_CAUTION_DK; amber.layer.cornerRadius=5;
     [amber.widthAnchor constraintEqualToConstant:10].active=YES; [amber.heightAnchor constraintEqualToConstant:10].active=YES;
     UIStackView *ct=VStack(0); self.commandTitle=Label(@"Awaiting server command",Sans(14,UIFontWeightBold),GA_INK); [ct addArrangedSubview:self.commandTitle];
     self.commandText=Label(@"Awaiting server command",Mono(12,UIFontWeightRegular),GA_SECONDARY); [ct addArrangedSubview:self.commandText];
     [cr addArrangedSubview:amber]; [cr addArrangedSubview:ct]; [self.commandRow addSubview:cr]; Pin(cr,self.commandRow,UIEdgeInsetsZero);
-    for(UIView *x in @[self.mockRow,self.startButton,self.address,self.connectButton,self.takeoffButton,self.cameraButton,self.cameraHelp,self.flightButton,self.flightHelp,self.commandRow]) { x.hidden=YES; [self.actionStack addArrangedSubview:x]; }
+    for(UIView *x in @[self.mockRow,self.startButton,self.address,self.connectButton,self.takeoffButton,self.authorizeTakeoffButton,self.cameraButton,self.cameraHelp,self.flightButton,self.flightHelp,self.commandRow]) { x.hidden=YES; [self.actionStack addArrangedSubview:x]; }
     [self.actionArea addSubview:self.actionStack]; Pin(self.actionStack,self.actionArea,UIEdgeInsetsMake(12,12,12,12));
     [v addArrangedSubview:self.actionArea];
     [card addSubview:v]; Pin(v,card,UIEdgeInsetsZero); return card;
@@ -593,6 +595,8 @@ static UIView *NavyHeader(UIView *content) {
     BOOL busy=s==GAControlPending || s==GAReleaseFailed || s==GAReturning || takeoffBusy;
     if(takeoffBusy) sub=t[@"takeoffStatus"]?:@"Takeoff pending; keep the RC ready";
     self.takeoffButton.enabled=started && [t[@"takeoffBlockReason"] isKindOfClass:NSString.class] && ![t[@"takeoffBlockReason"] length];
+    self.authorizeTakeoffButton.enabled=self.takeoffButton.enabled || [t[@"agentTakeoffAuthorized"] boolValue];
+    [self.authorizeTakeoffButton setTitle:[t[@"agentTakeoffAuthorized"] boolValue]?[NSString stringWithFormat:@"Revoke agent launch (%ld s)",(long)[t[@"agentTakeoffSeconds"] doubleValue]]:@"Authorize one agent launch" forState:UIControlStateNormal];
     self.cameraButton.enabled=started && online && aircraft && !busy && !armed;
     self.flightButton.enabled=started && online && aircraft && !busy;
     [self.flightButton setTitle:armed && !flight?@"Stop camera control":@"Enable flight" forState:UIControlStateNormal];
@@ -606,6 +610,7 @@ static UIView *NavyHeader(UIView *content) {
     } else {
         self.flightButton.hidden=NO; self.flightHelp.hidden=NO;
         self.takeoffButton.hidden=armed || [t[@"flying"] boolValue];
+        self.authorizeTakeoffButton.hidden=self.takeoffButton.hidden;
         if(armed) self.flightHelp.text=@"Stop camera control, then tap Enable flight. This button only stops control.";
         else {
             self.cameraButton.hidden=NO; self.cameraHelp.hidden=NO;
@@ -626,7 +631,7 @@ static UIView *NavyHeader(UIView *content) {
     self.bridge.log=^(NSString *s){ [weakSelf append:s]; };
     self.bridge.takeoffPrompt=^(NSString *identifier, void (^respond)(BOOL)) {
         if(!weakSelf || weakSelf.presentedViewController || UIApplication.sharedApplication.applicationState!=UIApplicationStateActive) { respond(NO); return; }
-        UIAlertController *prompt=[UIAlertController alertControllerWithTitle:@"Agent requests takeoff" message:@"The agent is asking the pilot to launch. Confirm only with a clear launch area and the RC ready. This request expires in 20 seconds. DJI will rise to about 1.2 m; AI stays disabled. Then climb with the RC to 5-30 m and enable flight separately." preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *prompt=[UIAlertController alertControllerWithTitle:@"Agent requests takeoff" message:@"The agent is asking the pilot to launch. Confirm only with a clear launch area and the RC ready. This request expires in 20 seconds. DJI will rise to about 1.2 m; AI stays disabled. Then enable flight separately." preferredStyle:UIAlertControllerStyleAlert];
         [prompt addAction:[UIAlertAction actionWithTitle:@"Decline" style:UIAlertActionStyleCancel handler:^(UIAlertAction *a){respond(NO);}]];
         [prompt addAction:[UIAlertAction actionWithTitle:@"Take off" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a){respond(YES);}]];
         __weak UIAlertController *weakPrompt=prompt;
@@ -650,12 +655,22 @@ static UIView *NavyHeader(UIView *content) {
     else [self append:@"Use a server origin such as http://192.168.1.20:8000 (no path)"];
     [self render];
 }
+- (void)authorizeTakeoff {
+    [self.view endEditing:YES];
+    if(!self.bridge || self.presentedViewController) return;
+    if([[self.bridge telemetry][@"agentTakeoffAuthorized"] boolValue]) { [self.bridge stopAutomation:@"Pilot revoked agent launch"]; return; }
+    NSString *problem=[self.bridge takeoffProblem]; if(problem) { [self append:problem]; return; }
+    UIAlertController *a=[UIAlertController alertControllerWithTitle:@"Authorize one agent launch?" message:@"For the next 5 minutes, the agent may take off once without another confirmation and enable flight after a stable hover. Confirm the launch area is clear and keep the RC ready. Flight stays within 1–30 m above takeoff and the existing distance/speed limits. STOP, disconnection or leaving this app revokes permission." preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Authorize" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){[self.bridge authorizeAgentTakeoff];}]];
+    [self presentViewController:a animated:YES completion:nil];
+}
 - (void)takeoff {
     [self.view endEditing:YES];
     if(!self.bridge || self.presentedViewController) return;
     NSString *problem=[self.bridge takeoffProblem];
     if(problem) { [self append:problem]; return; }
-    UIAlertController *a=[UIAlertController alertControllerWithTitle:@"Pilot takeoff?" message:@"Confirm the launch area is clear and the pilot has the RC ready. DJI will take off to about 1.2 m. Keep Guardian Angel open: the server connection and ground anchor stay in place. AI flight control stays disabled. Then use the RC to climb to 5-30 m before enabling flight." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *a=[UIAlertController alertControllerWithTitle:@"Pilot takeoff?" message:@"Confirm the launch area is clear and the pilot has the RC ready. DJI will take off to about 1.2 m. Keep Guardian Angel open: the server connection and ground anchor stay in place. AI flight control stays disabled. Then enable flight when ready." preferredStyle:UIAlertControllerStyleAlert];
     [a addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     [a addAction:[UIAlertAction actionWithTitle:@"Take off" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){[self.bridge pilotTakeoff];}]];
     [self presentViewController:a animated:YES completion:nil];

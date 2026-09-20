@@ -8,6 +8,11 @@ static GATakeoffObservation ground(void) {
 }
 static void fresh(GATakeoffObservation *o,double now) { o->now=now; o->fcTime=now; o->batteryTime=now; }
 int main(void) {
+    GATakeoffPermit permit={400};
+    assert(GATakeoffPermitValid(permit,100)); assert(!GATakeoffPermitValid(permit,400));
+    assert(!GATakeoffPermitValid(permit,NAN));
+    assert(GATakeoffConsumePermit(&permit,399)); assert(!GATakeoffConsumePermit(&permit,399));
+    permit=(GATakeoffPermit){400}; assert(!GATakeoffConsumePermit(&permit,400));
     GATakeoff s={0}; GATakeoffObservation o=ground();
     assert(!GATakeoffProblem(s,o));
     // All launch prerequisites are rechecked at confirmation, including zero/stale/NaN data.
