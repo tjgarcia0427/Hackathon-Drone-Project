@@ -60,7 +60,8 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         if(!key.length || [key containsString:@"REPLACE"]) [self note:@"Set DJI_APP_KEY in Config/Secrets.xcconfig first."];
         else [DJISDKManager registerAppWithDelegate:self];
         [[DJIVideoPreviewer instance] setView:self.preview];
-        [DJIVideoPreviewer instance].enableHardwareDecode=YES;
+        [DJIVideoPreviewer instance].enableHardwareDecode=NO; // software (FFmpeg) decode: slower but works on every model
+        [DJIVideoPreviewer instance].type=DJIVideoPreviewerTypeAutoAdapt;
         [[DJIVideoPreviewer instance] start];
         [[DJISDKManager videoFeeder].primaryVideoFeed addListener:self withQueue:dispatch_get_main_queue()];
     }
@@ -142,6 +143,8 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
 - (void)videoFeed:(DJIVideoFeed *)videoFeed didUpdateVideoData:(NSData *)videoData {
     if(_closed || _mock) return;
     _videoTime=CACurrentMediaTime();
+    static NSUInteger feedBytes=0; static double feedLogged=0; feedBytes+=videoData.length;
+    if(_videoTime-feedLogged>5) { feedLogged=_videoTime; [self note:[NSString stringWithFormat:@"Video feed: %lu bytes so far, decoding %@",(unsigned long)feedBytes,[DJIVideoPreviewer instance].videoSize.width>0?@"OK":@"no frames yet"]]; }
     [[DJIVideoPreviewer instance] push:(uint8_t *)videoData.bytes length:(int)videoData.length];
 }
 - (NSString *)flightProblem {
