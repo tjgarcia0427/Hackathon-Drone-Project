@@ -10,7 +10,7 @@
 @property(nonatomic,copy) void (^stateUpdated)(NSDictionary *telemetry);
 - (NSDictionary *)telemetry;
 - (instancetype)initWithPreview:(UIView *)preview mock:(BOOL)mock;
-// Server requests only present a local pilot prompt. These blocks execute on main.
+// Without one-use authorization, server requests present a pilot prompt on main.
 @property(nonatomic,copy) void (^takeoffPrompt)(NSString *, void (^respond)(BOOL));
 @property(nonatomic,copy) void (^dismissTakeoffPrompt)(void);
 - (void)start;

@@ -154,7 +154,7 @@ Mission memory is stored under `server/data/agent/` (Git-ignored), or `GA_AGENT_
 
 ## Validation and handoff
 
-Run `python -m unittest discover -s server -p 'test_*.py' -v` from the repo root and `node --test integrations/openclaw/test/*.test.mjs`. macOS CI also runs the production takeoff-request methods with SDK/UI seams, the native takeoff/navigation suites and the real DJI iPhone build. The UI branch includes a simulator scenario proving that an agent request presents/dismisses a pilot prompt without launching.
+Run `python -m unittest discover -s server -p 'test_*.py' -v` from the repo root and `node --test integrations/openclaw/test/*.test.mjs`. macOS CI also runs the production takeoff-request methods with SDK/UI seams, the native takeoff/navigation suites and the real DJI iPhone build. Main includes simulator scenarios for authorization/revocation and fallback prompt dismissal without launching.
 
 The local plugin tests exercise registration contracts, image results, session isolation, cancellation and HTTP polling without a live OpenClaw installation. Runtime plugin inspection plus a real image/model call on the team's installed Gateway, signed iPhone installation and supervised hardware checks remain required. No real aircraft commands were issued while developing this integration.
 

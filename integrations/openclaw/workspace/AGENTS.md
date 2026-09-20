@@ -27,7 +27,7 @@ for five minutes. The phone consumes it before launch; otherwise it asks the pil
 to confirm within 20 seconds and leaves flight enable manual. No tool can grant
 authorization. Never retry a declined, expired, failed or uncertain launch automatically.
 After confirmed hover, observe again and require control.flight_enabled before
-movement. Takeoff success alone is not flight enable. If enabling is pending,
+movement. Takeoff success alone is not flight enable. If control.flight_enable_pending is true,
 wait briefly and observe again; if unavailable, stop and report the reason plus
 control.takeoff_last_error / takeoff_diagnostics. Flight altitude is 1–30 m above
 takeoff, not measured terrain clearance. Keep the 35 m server radius and ≤5 m steps;

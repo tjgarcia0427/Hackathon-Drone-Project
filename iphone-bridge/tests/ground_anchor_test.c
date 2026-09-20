@@ -7,7 +7,8 @@ int main(void) {
     assert(GARecoverAircraftHome(true,true,true,aircraft,launch,&out));
     assert(out.lat==launch.lat && out.lon==launch.lon && out.altitude==0);
     assert(out.lon!=aircraft.lon); // Must not move the fence to the airborne position.
-    assert(!GAInsideFence(aircraft,out)); // Recovery at low hover does not bypass flight altitude limits.
+    assert(GAInsideFence(aircraft,out)); // The requested 1 m floor includes normal takeoff hover.
+    aircraft.altitude=.99; assert(!GAInsideFence(aircraft,out)); // Recovery cannot bypass the floor.
     aircraft.altitude=8;
     assert(GAInsideFence(aircraft,out));
     assert(!GARecoverAircraftHome(false,true,true,aircraft,launch,&out));
