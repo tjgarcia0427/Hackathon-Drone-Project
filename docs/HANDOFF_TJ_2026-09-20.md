@@ -37,7 +37,7 @@ All on `main`, commits `ecc4794`…`4ebcf22`, author Bibby95.
 
 **`server/planner.py` / `app.py`** — search timeout 8 s → 30 s (`AI_SEARCH_TIMEOUT`), frame‑age window follows it. CLI providers take ~8–10 s per decision.
 
-**`server/app.py`** — `POST /dev/cmd` (gated by `DEV_COMMANDS=1`): send one `gimbal|yaw|hold|stop` to the bridge without a mission. Props‑off bench tool. Refuses while a mission is active.
+**`server/app.py`** — `POST /dev/cmd` (gated by `DEV_COMMANDS=1`): send one `gimbal|yaw|hold|stop|move` to the bridge without a mission. Props‑off bench tool (gimbal/hold/stop), plus supervised flight-test hops: `{"action":"move","bearing":0,"dist":5}` runs through `safety.check_step` (0–5 m, 35 m geofence, battery floor), needs live telemetry + ground anchor, and the phone still requires local Enable flight. Refuses while a mission is active.
 
 **`server/requirements.txt`** — `eval_type_backport` (your `watch_alerts.py` uses `float | None`; Pydantic can't evaluate that on Python 3.9 without it).
 

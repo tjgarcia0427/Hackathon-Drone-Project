@@ -422,14 +422,17 @@ async def dev_cmd(body: dict) -> dict:
     """Bench harness: send ONE raw command to the connected bridge, bypassing the mission runner.
 
     Enabled only with DEV_COMMANDS=1. Intended for props-off checks (gimbal, hold, stop) where GPS is
-    unavailable and a full dispatch would be refused. Limited to non-navigation actions.
+    unavailable and a full dispatch would be refused, plus a single short `move` for supervised
+    flight-test hops. A move runs through the same safety.check_step guard as a mission step
+    (0–5 m, inside the 35 m home geofence, battery floor) and still needs the pilot's local
+    flight enable on the iPhone.
     """
     if os.environ.get("DEV_COMMANDS", "0") != "1":
         raise HTTPException(403, "set DEV_COMMANDS=1 to enable the bench command endpoint")
     if S.search_task and not S.search_task.done():
         raise HTTPException(409, "mission active; dev commands disabled")
     action = str(body.get("action", ""))
-    allowed = {"gimbal", "hold", "stop", "yaw"}
+    allowed = {"gimbal", "hold", "stop", "yaw", "move"}
     if action not in allowed:
         raise HTTPException(400, f"action must be one of {sorted(allowed)}")
     params = {k: v for k, v in body.items() if k != "action"}
@@ -437,6 +440,18 @@ async def dev_cmd(body: dict) -> dict:
         raise HTTPException(400, "gimbal needs pitch -90..0")
     if action == "yaw" and not (isinstance(params.get("deg"), (int, float)) and -180 <= params["deg"] <= 180):
         raise HTTPException(400, "yaw needs deg -180..180")
+    if action == "move":
+        bearing, dist = params.get("bearing"), params.get("dist")
+        if not (isinstance(bearing, (int, float)) and isinstance(dist, (int, float))):
+            raise HTTPException(400, "move needs bearing 0..<360 and dist 0..5")
+        if S.drone is None or S.home is None:
+            raise HTTPException(409, "move needs live telemetry and a ground anchor (home)")
+        step = SearchStep(action="move", move_bearing_deg=float(bearing), move_distance_m=float(dist),
+                          observation="dev bench move")
+        verdict = safety.check_step(step, S.drone, *S.home, 0)
+        if not verdict.ok:
+            raise HTTPException(400, f"move refused: {verdict.reason}")
+        params = {"bearing": float(bearing), "dist": float(dist)}
     try:
         ack = await send_cmd(action, timeout=25, **params)
     except Exception as e:  # noqa: BLE001
