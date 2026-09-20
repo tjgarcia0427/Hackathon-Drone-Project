@@ -20,11 +20,11 @@ The DJI decoder delegate, Mavic Air 2 encoder selection/reset, software decode, 
 
 ## Validation
 
+**Latest validated code: `1a8e69b91282aa66b4d8947c92e22c1b1ea76503`.** [Run 35492150230](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35492150230) passed: production iPhone compile/link with DJI pods, presentation-state checks, navigation tests, full bridge-preservation check, and simulator UI interactions. Thirteen screenshots cover the main states, scrolled camera-to-flight procedure, confirmation, and event log. Final screenshots were visually reviewed; the ground-anchor label fits and STOP stays pinned. The simulator log contains no Auto Layout conflict messages. Later documentation-only commits do not change this tested code.
+
 The first correction commit `73f4dcb` passed the [macOS iPhone build](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35491353246): pinned CocoaPods installed, the **production iPhone target compiled and linked unsigned**, and presentation-state / navigation / preservation checks passed.
 
-
-
-[Run 35491733367](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35491733367) passed for `6abcd68`: the production app compiled/linked again, the simulator interaction sequence passed, and 12 state screenshots were captured. Review of the simulator log found no Auto Layout conflict messages. These are simulated hardware states, not a real DJI mission. Screenshot review led to a final label-fitting and STOP alignment polish, which is covered by the next branch run.
+[Run 35491733367](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35491733367) passed for `6abcd68`: the production app compiled/linked again, the simulator interaction sequence passed, and 12 state screenshots were captured. Review of the simulator log found no Auto Layout conflict messages. These are simulated hardware states, not a real DJI mission. Screenshot review led to the label-fitting and STOP alignment polish validated by the latest run above.
 
 Later changes must pass the branch's `iPhone UI checks` workflow again. It also builds the production UIKit controller in a separate **simulator-only harness**, using fake hardware and server state. This exercises camera STOP, separate flight confirmation, log STOP, rejection of a disconnected/stale confirmation, and modal STOP. Artifacts contain state screenshots and build logs. The harness is never part of the production target and does not test DJI hardware or a real server mission.
 
@@ -59,6 +59,10 @@ curl -X POST http://localhost:8000/dev/cmd \
   -H 'Content-Type: application/json' \
   -d '{"action":"gimbal","pitch":-45}'
 ```
+
+## Concurrent main update
+
+Main also received the teammate's app-icon commit `da36a46`. This UI branch does not replace its asset catalog or project settings; a normal Git merge should retain that independent change. Do not overwrite the main project file with an older copy from this branch during handoff.
 
 ## Design reference
 
