@@ -245,7 +245,8 @@ class Controller:
         if action not in ("hold", "return_home", "report_candidate") and self.steps >= safety.LIMITS["max_search_steps"]:
             raise HTTPException(409, "Action budget reached; hold, return home or stop")
         if action == "request_takeoff":
-            if control.get("takeoff_request_supported") is not True or control.get("takeoff_ready") is not True:
+            # The iPhone boxes these gates as NSNumber ints (1/0), not JSON booleans.
+        if control.get("takeoff_request_supported") not in (True, 1) or control.get("takeoff_ready") not in (True, 1):
                 raise HTTPException(409, control.get("takeoff_problem") or "Phone is not ready for pilot takeoff")
             return "request_takeoff", {}, 65, observation
         if action == "report_candidate":
