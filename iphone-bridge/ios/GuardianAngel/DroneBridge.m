@@ -57,6 +57,42 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     return self;
 }
 - (void)note:(NSString *)message { if(self.log) self.log(message); }
+
+// Read-only presentation snapshot. Flight decisions remain in armFlight:/flightProblem.
+- (NSDictionary *)telemetry {
+    double now=CACurrentMediaTime();
+    BOOL fcFresh=_mock || (_fcTime>0 && now-_fcTime<1.5);
+    BOOL batteryFresh=_mock || (_batteryTime>0 && now-_batteryTime<5);
+    BOOL poseFresh=fcFresh && _gps && _homeSet && GAValidPose(_pose) && GAValidPose(_home);
+    NSDictionary *readout=[self aircraftReadout];
+    NSString *blocked=nil;
+    if(_closed) blocked=@"Bridge is closed";
+    else if(_enabling || _returning || _pendingSDKTransitions) blocked=@"Wait for control transition / return to finish";
+    else if(_releaseFailed) blocked=@"Control release is unconfirmed. Use RC takeover, then press STOP to retry.";
+    else if(!self.client.connected) blocked=@"Connect to the server first";
+    else if(!_mock && !self.aircraft) blocked=@"Connect the aircraft first";
+    else if(_armed) blocked=@"Stop camera control before enabling flight";
+    else blocked=[self flightProblem];
+    NSString *action=self.active[@"action"], *identifier=self.active[@"cmd_id"];
+    return @{@"started":@(_lastTick>0 && !_closed), @"mock":@(_mock),
+             @"aircraft":@(_mock || self.aircraft!=nil), @"serverOnline":@(self.client.connected),
+             @"battery":@(_battery), @"batteryFresh":@(batteryFresh), @"positionFresh":@(poseFresh),
+             @"displayAltitude":readout[@"altitude_m"], @"displayHeading":readout[@"heading_deg"],
+             @"altitudeFresh":@([readout[@"altitude_m"] isKindOfClass:NSNumber.class]),
+             @"headingFresh":@([readout[@"heading_deg"] isKindOfClass:NSNumber.class]),
+             @"gpsFresh":@([readout[@"latitude"] isKindOfClass:NSNumber.class]),
+             @"altitude":@(_pose.altitude), @"heading":@(fmod(_pose.heading+360,360)),
+             @"latitude":@(_pose.lat), @"longitude":@(_pose.lon), @"gps":@(_gps), @"homeSet":@(_homeSet),
+             @"flying":@(_flying), @"telemetryFresh":@(fcFresh && batteryFresh),
+             @"distanceFromHome":@(poseFresh?GADistance(_pose.lat,_pose.lon,_home.lat,_home.lon):-1),
+             @"armed":@(_armed), @"flightEnabled":@(_flightEnabled), @"enabling":@(_enabling),
+             @"returning":@(_returning), @"releaseFailed":@(_releaseFailed),
+             @"takeoffBusy":@(GATakeoffBusy(_pilotTakeoff)), @"takeoffStatus":[self takeoffStatus], @"takeoffBlockReason":[self takeoffProblem]?:@"",
+             @"pendingTransitions":@(_pendingSDKTransitions), @"flightBlockReason":blocked?:@"",
+             @"telemetryAt":@(_fcTime>0 ? NSDate.date.timeIntervalSince1970-(now-_fcTime) : 0),
+             @"command":action?[NSString stringWithFormat:@"%@ (%@)",action,identifier?:@"?"]:@""};
+}
+
 // BEGIN display-only readout.
 - (NSDictionary *)aircraftReadout {
     GATelemetrySample sample=_displaySample;
@@ -538,6 +574,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
             id number=readout[key]; return [number isKindOfClass:NSNumber.class]?[NSString stringWithFormat:format,[number doubleValue]]:@"—";
         };
         if(self.updated) self.updated([NSString stringWithFormat:@"%@ • %@\nBattery %@ • Alt %@ (takeoff) • Heading %@\nPosition %@, %@\nGPS %@ • Ground anchor %@ • %@",_mock?@"MOCK":self.aircraft?@"Mavic Air 2":@"No aircraft",self.client.connected?@"Server online":@"Server offline",value(@"battery_pct",@"%.0f%%"),value(@"altitude_m",@"%.1f m"),value(@"heading_deg",@"%.0f°"),value(@"latitude",@"%.6f"),value(@"longitude",@"%.6f"),[readout[@"gps_ok"] boolValue]?@"OK":@"waiting",_homeSet?@"OK":@"waiting",GATakeoffBusy(_pilotTakeoff)?[self takeoffStatus]:_returning?@"DJI RETURNING":_flightEnabled?@"FLIGHT ENABLED":_armed?@"CAMERA ONLY":@"DISARMED"]);
+        if(self.stateUpdated) self.stateUpdated([self telemetry]);
     }
     // END display-only reporting.
     if(now-_lastFrame>=1 && self.client.connected) { _lastFrame=now; [self frame]; }

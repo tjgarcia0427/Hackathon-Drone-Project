@@ -2,7 +2,7 @@
 
 ## Goal and current decisions
 
-Build a supervised fall-response/observation demo using Mavic Air 2, a native iPhone bridge, a Python command center with selectable AI and a native Watch button/shake help trigger (legacy Shortcut still supported). The team has moved off the Android route. Use the existing DJI iOS SDK; do not modify aircraft firmware. Work directly on `main`, with no PR workflow, as explicitly requested by TJ. Preserve and coordinate concurrent teammate edits.
+Build a supervised fall-response/observation demo using Mavic Air 2, a native iPhone bridge, a Python command center with selectable AI and a native Watch button/shake help trigger (legacy Shortcut still supported). The team has moved off the Android route. Use the existing DJI iOS SDK; do not modify aircraft firmware. TJ now authorizes `ui-redesign` for the iPhone UI work; keep the hardware-tested `main` unchanged until Lorenzo completes the device regression. No PR workflow is required. Preserve and coordinate concurrent teammate edits.
 
 TJ develops on Windows. The teammate has a Mac, Apple Watch SE (2nd generation) on watchOS 26.5, and drone. A compatible iPhone must be physically connected by USB data cable to the RC-N1 beside the pilot. If TJ's only iPhone is remote, another local iPhone is still required. Mac/Xcode signs and installs locally; no App Store submission is needed.
 
@@ -13,7 +13,7 @@ TJ develops on Windows. The teammate has a Mac, Apple Watch SE (2nd generation) 
 - `DroneBridge.m`: aircraft/component delegates, decoded camera snapshots, GPS/battery/home telemetry, command validation, mock mode, 10 Hz control loop, local arm/disarm and interruptions.
 - `BridgeClient.m`: WebSocket JSON, ping/pong heartbeat, raw JPEG upload, session-aware callbacks.
 - `Navigation.c`: bounded target/velocity math shared by real and mock control. DJI Ground/Velocity axes are **roll = north velocity, pitch = east velocity**, positive verticalThrottle = up; yaw rate positive clockwise. These mappings were checked against official 4.16.2 headers and still require physical verification.
-- `AppDelegate.m`: preview, server URL, mock selector, start/connect, camera-only enable, confirmed flight enable, STOP AI and log.
+- `AppDelegate.m`: `BridgeViewController` (navy header, status strip, camera preview, telemetry table, 4-step pre-flight procedure, event-log tail, pinned STOP bar), `FlightConfirmViewController` (enable-flight modal with live gate checks) and `LogViewController` (full event log). Presentation only; all control goes through `DroneBridge`, whose original `updated(NSString *)` callback remains compatible. The additive `stateUpdated(NSDictionary *)` callback and read-only `telemetry` snapshot supply the new screen. See `docs/IPHONE_UI_HANDOFF.md` (repository root) for control-flow corrections, native build evidence and device regression.
 - `iphone-bridge/tools/smoke_server.py`: manual mock-only command/ack/frame test server, no AI costs and no live hardware.
 - `server/app.py`: reviewed integration already applied. Adds bounded delivery/completion waits, expiry, fresh telemetry/frames, reset/abort cancellation, stop requests, one connection, disconnect cleanup and frame generation checks.
 - `server/planner.py`, `server/safety.py`: guidance/limits aligned to the iPhone demo: 5 m moves, 35 m server radius with 40 m independent phone fence, 5–30 m altitude, about 10 m suggested altitude and 5–10 m demo search radius. Invalid/non-finite navigation parameters are rejected in server safety.
@@ -31,7 +31,7 @@ The current server supports `codex` (ChatGPT subscription), `claude_code` (Claud
 - `server/ai_smoke_test.py`: synthetic red-circle image, no drone connection. `--check-only` tests prerequisites/login; omit it to test real image inference. A pass is not a flight or latency guarantee.
 - `server/test_ai_backends.py` and `test_ai_configuration.py`: real SDK serialization via mocked HTTP, actual CLI subprocess fixtures, key/login isolation, timeouts, switching locks and reset cancellation.
 
-These changes were developed and published through the GitHub connector directly to `main`, with no PR. Continue using the connector when available. Preserve teammate changes; do not force-push or reapply the old server migration.
+These changes were developed and published through the GitHub connector directly to `main`, with no PR. Continue using the connector when available; current iPhone UI updates belong on `ui-redesign`, not `main`. Preserve teammate changes; do not force-push or reapply the old server migration.
 
 ## What has been checked
 
@@ -75,6 +75,3 @@ The iPhone is a bridge/controller, not an onboard visual AI model. The selected 
 
 The backend is unauthenticated and intended for a private demo network or authenticated VPN. Do not use an unauthenticated public tunnel. Keep the bridge app foregrounded; triggering a Shortcut by switching apps on that same iPhone can disarm the bridge, so use a separate incident device or the laptop's demo trigger.
 
-## Pilot takeoff update
-
-TJ authorized adding a pilot-operated Take off button to the existing app. This functional change is applied to main and ui-redesign separately; no UI merge is required. Read docs/PILOT_TAKEOFF.md for launch gates, state continuity and the first hardware test. The connection and launch anchor are retained through in-app takeoff; genuine aircraft disconnects and app termination still invalidate the flight session. AI flight enabling remains a separate pilot action.

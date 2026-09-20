@@ -114,10 +114,14 @@ Choose ChatGPT subscription via Codex CLI, Claude subscription via Claude Code C
 
 For remote teammates, use a private authenticated VPN or run the server beside the pilot and access that machine through your existing secure connection. **This repository's server has no authentication. Do not publish it through an open internet tunnel:** anyone who can reach it can submit incidents/commands and images. For a shared venue network, use your own private network. The development app permits local HTTP traffic; public deployment would require TLS and server-side authentication.
 
+## Redesigned UI on `ui-redesign`
+
+See [UI handoff and regression](../docs/IPHONE_UI_HANDOFF.md). Camera-only control is optional. After arming it, tap **Stop camera control**, then **Enable flight** and confirm separately. STOP never automatically enables flight. The original flight checks and working video pipeline are preserved. The initial UI correction passed an unsigned production iPhone build in macOS CI; physical video/control regression is still required before merging.
+
 ## Hardware sequence
 
 1. Initially remove propellers. Close DJI Fly, turn **Mock hardware off before Start bridge**, and connect aircraft, controller and iPhone. The first DJI registration requires internet access.
-2. Verify registration, correct aircraft model, battery updates, and live preview. Enable **Camera only** and test a gimbal command through your server. The full existing mission begins with `goto`, so it will correctly fail while camera-only control is enabled; use a targeted gimbal test for this milestone.
+2. Verify registration, correct aircraft model, battery updates, and live preview. Tap **Arm camera only** and test a gimbal command through your server. The full existing mission begins with `goto`, so it will correctly fail while camera-only control is enabled; use a targeted gimbal test for this milestone.
 3. For flight testing, the pilot configures/checks normal aircraft failsafes and RTH height in DJI Fly beforehand, then closes DJI Fly. Start the bridge on the ground in an open outdoor area and wait for **GPS OK / Ground anchor OK**. Keep the app open and connected.
 4. Press **STOP AI** if camera-only mode is armed. Tap **Take off (pilot)** and confirm locally. Stay in Guardian Angel: the server connection, video and ground anchor remain intact through the approximately 1.2 m DJI takeoff. Wait for the hover confirmation, then use the RC to climb to **5–30 m** near launch. Takeoff does not enable AI control. See [pilot takeoff](../docs/PILOT_TAKEOFF.md) for launch gates, interruptions and testing. Controller takeoff remains an alternative.
 5. Tap **STOP AI** if camera-only mode was previously enabled, then **Enable flight** locally. Confirm the on-screen state. Test a small yaw, hold, then a short move with a clear flight path before attempting a server mission.
@@ -174,3 +178,4 @@ The three optional FastAPI transport tests require `python -m pip install -r too
 - `VALIDATION.md`: what was verified and what still needs hardware.
 
 API references: [DJI iOS SDK source/sample](https://github.com/dji-sdk/Mobile-SDK-iOS), [DJIWidget](https://github.com/dji-sdk/DJIWidget), [DJI flight controller API](https://developer.dji.com/api-reference/ios-api/Components/FlightController/DJIFlightController.html). Dependency licenses remain applicable; see `THIRD-PARTY-NOTICES.md`.
+

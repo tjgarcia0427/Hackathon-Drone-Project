@@ -312,3 +312,4 @@ def generate(settings: Settings, model: type[BaseModel], system: str, prompt: st
     except Exception as exc:
         # Avoid echoing provider HTTP bodies, tokens, images or CLI account data to the dashboard.
         raise AIError(f"{PROVIDERS[provider]} failed ({type(exc).__name__}); check model, login and provider availability") from exc
+

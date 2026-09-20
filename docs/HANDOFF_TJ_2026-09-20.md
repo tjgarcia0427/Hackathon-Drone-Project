@@ -2,6 +2,8 @@
 
 _Written by Alfred (Lorenzo's agent) at 12:50 AM ET, Sun 2026-09-20. Read this before touching `main`._
 
+> September 20 review addendum: TJ authorized work on `ui-redesign`. See [iPhone UI handoff](IPHONE_UI_HANDOFF.md) for the corrected control sequence, preserved video code, successful iPhone CI build and remaining device checks. The original bench report below is Lorenzo/Alfred's hardware evidence; it does not establish real flight.
+
 ## 1. What happened tonight (hardware bench, props off) — ALL GREEN
 
 Ran on Lorenzo's Mac (Xcode 26.6, Python 3.9 venv), iPhone 14 Pro on the RC‑N1, Mavic Air 2 powered, indoors (no GPS).
@@ -26,7 +28,7 @@ All on `main`, commits `ecc4794`…`4ebcf22`, author Bibby95.
 **`iphone-bridge/ios/GuardianAngel/DroneBridge.m`** — video was dead as shipped (feed bytes arrived, decoder never emitted a frame). Fixes, in order of importance:
 1. **`DJIVideoPreviewerFrameControlDelegate` implemented** on `DroneBridge` and set as `[DJIVideoPreviewer instance].frameControlHandler`. OcuSync 2 aircraft (Air 2, Mini 2…) embed decoding assist info in the feed; the previewer must hand it back to the SDK via `primaryVideoFeed parseDecodingAssistInfoWithBuffer:…`. **This was the actual fix.** Mirrors DJI's sample `VideoPreviewerAdapter` (that class lives in the sample app, not the DJIWidget pod).
 2. `[DJIVideoPreviewer instance].encoderType = H264EncoderType_MavicAir2` + `reset` when the aircraft connects.
-3. `enableHardwareDecode = NO`, `type = DJIVideoPreviewerTypeAutoAdapt` (software decode works everywhere; you can try re-enabling HW decode later — verify on device).
+3. `enableHardwareDecode = NO`, `type = DJIVideoPreviewerTypeAutoAdapt` (software decode worked on this tested setup; you can try re-enabling HW decode later — verify on device).
 4. A 5‑second "Video feed: N bytes" log line in `videoFeed:didUpdateVideoData:` — keep it, it's the fastest bench diagnostic.
 
 **`Info.plist`** — Bluetooth usage string replaced (the build on Lorenzo's Mac showed "LETS HACK THIS DEVICE!!"; repo copy was already sane).
@@ -44,14 +46,14 @@ All on `main`, commits `ecc4794`…`4ebcf22`, author Bibby95.
 Full spec: **`docs/UI_REDESIGN_SPEC.md`** (Platform 1 section). Government/public‑safety look: navy header, colored status strip, telemetry table, 4‑step pre‑flight procedure card (Start bridge → Connect server → Arm camera only → Enable flight), event log, pinned STOP bar, custom Enable‑flight modal with live gate checks. High fidelity — match colors/type/copy.
 
 **Hard rules**
-- **Presentation only.** `DroneBridge.m` flight/safety logic, the protocol, and everything in §2 stay exactly as they are. The one allowed `DroneBridge` change is the spec's suggested refactor: have `updated` emit a struct/`NSDictionary` instead of a formatted string so the VC can fill cells. Keep the string path working too until the new VC is verified.
+- **Presentation only.** `DroneBridge.m` flight/safety logic, the protocol, and everything in §2 stay exactly as they are. The one allowed `DroneBridge` change is the spec's suggested refactor: retain `updated(NSString *)` and add `stateUpdated(NSDictionary *)` / a read-only snapshot so the VC can fill cells without changing control logic.
 - **Work on a branch: `ui-redesign`.** `main` is the build that flies Sunday. Lorenzo merges after a mock‑mode regression on his Mac.
 - Rebuild `BridgeViewController` in `AppDelegate.m` (or split into its own file) with UIKit + programmatic Auto Layout, no storyboards, no new pods. Add `LogViewController`.
 - Fonts: bundling Public Sans/Roboto Mono is optional; SF Pro / SF Mono fallback is fine for the hackathon.
 - Don't change the Mock switch default (on) or the "switch locked after Start" behavior.
 - The dashboard (Platform 2) is **Alfred's** — don't touch `server/static/index.html`.
 
-**Regression check before you push the branch:** mock mode against the project server: Start → Connect → Camera only → Enable flight (confirm) → dashboard Simulate fall → Dispatch → phone executes goto/gimbal/yaw/move → RTL. Then live: Start → aircraft detected → Connect → Camera only → `curl -X POST localhost:8000/dev/cmd -d '{"action":"gimbal","pitch":-45}'` tilts the camera and video shows on both screens.
+**Regression check before you push the branch:** mock mode against the project server: Start → Connect → Camera only → Stop camera control → Enable flight (confirm) → dashboard Simulate fall → Dispatch → phone executes goto/gimbal/yaw/move → RTL. Then live: Start → aircraft detected → Connect → Camera only → `curl -X POST localhost:8000/dev/cmd -H 'Content-Type: application/json' -d '{"action":"gimbal","pitch":-45}'` tilts the camera and video shows on both screens.
 
 ## 4. Build/install on the Mac (Xcode GUI fails on `-lDJIWidget` after a clean; use these)
 
@@ -73,7 +75,7 @@ Then force‑quit and relaunch the app on the phone (a fresh install resets Mock
 ## 6. What I still need from you
 Nothing blocking. Nice‑to‑have before the event:
 - Confirm you're OK with the four `DroneBridge.m` changes (they're minimal and commented).
-- The Watch app you pushed is unbuilt on a Mac; treat it as P1 after the flight test.
+- The Watch app compiled and linked on macOS CI (see `watch-app/VALIDATION.md`); signed installation and real GPS/motion/network testing on the physical Watch remain.
 - If you re‑enable hardware decode, verify video on the device first.
 
 — Alfred

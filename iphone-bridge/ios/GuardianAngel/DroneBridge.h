@@ -3,7 +3,12 @@
 @interface DroneBridge : NSObject
 @property(nonatomic,strong,readonly) BridgeClient *client;
 @property(nonatomic,copy) void (^log)(NSString *);
-@property(nonatomic,copy) void (^updated)(NSString *);
+// Keep the original callback compatible with the bench-tested view controller.
+@property(nonatomic,copy) void (^updated)(NSString *status);
+// Read-only UI state, delivered on the main thread at 1 Hz. Call telemetry on the
+// main thread for a fresh gate check. No SDK commands are issued by this getter.
+@property(nonatomic,copy) void (^stateUpdated)(NSDictionary *telemetry);
+- (NSDictionary *)telemetry;
 - (instancetype)initWithPreview:(UIView *)preview mock:(BOOL)mock;
 // Server requests only present a local pilot prompt. These blocks execute on main.
 @property(nonatomic,copy) void (^takeoffPrompt)(NSString *, void (^respond)(BOOL));

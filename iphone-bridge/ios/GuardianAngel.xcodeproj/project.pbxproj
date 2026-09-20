@@ -11,16 +11,6 @@
 "path" = "PilotTakeoff.h";
 "sourceTree" = "<group>";
 };
-"A55E75A1C0DE00000000AC01" = {
-"isa" = "PBXFileReference";
-"lastKnownFileType" = "folder.assetcatalog";
-"path" = "Assets.xcassets";
-"sourceTree" = "<group>";
-};
-"A55E75A1C0DE00000000AC02" = {
-"isa" = "PBXBuildFile";
-"fileRef" = "A55E75A1C0DE00000000AC01";
-};
 "F671B383F5E2DA3173C5507F" = {
 "isa" = "PBXFileReference";
 "lastKnownFileType" = "sourcecode.c.objc";
@@ -107,7 +97,6 @@
 "3A2A88DEEFF3D1D23E496597" = {
 "isa" = "PBXGroup";
 "children" = (
-"A55E75A1C0DE00000000AC01",
 "F671B383F5E2DA3173C5507F",
 "FF29C67046709C41EE524205",
 "28ED412269E66DB9A78389FF",
@@ -169,7 +158,6 @@
 "isa" = "PBXResourcesBuildPhase";
 "buildActionMask" = "2147483647";
 "files" = (
-"A55E75A1C0DE00000000AC02",
 );
 "runOnlyForDeploymentPostprocessing" = "0";
 };
