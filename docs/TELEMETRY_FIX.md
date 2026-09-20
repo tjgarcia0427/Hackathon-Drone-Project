@@ -31,3 +31,10 @@ Regression coverage checks grounded zero altitude, weak/missing GPS, independent
 The `Aircraft telemetry checks` workflow runs Foundation observation tests, navigation tests, dashboard JavaScript tests, preservation checks, and an unsigned production DJI build on `main`. The existing iPhone UI workflow builds `ui-redesign` and exercises an additional GPS-waiting/zero-altitude screen. Existing Watch/server CI runs the Python regression suite. Automated checks do not replace a real SDK/hardware test; Windows cannot run Xcode or measure the team's aircraft telemetry timing.
 
 The original video fixes (OcuSync decoding-assist delegate, encoder selection, software decode and feed-byte logging) are retained. No AI provider, camera upload rate or flight limit was changed. Teammates should keep the functional patch on both branches when merging later.
+
+### Completed automated validation
+
+- `main` functional commit: `1bb45d6`; **64 server tests**, Watch tests/build, native telemetry/navigation tests and the unsigned production iPhone build passed. [iPhone/telemetry run](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35520385870), [Watch/server run](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35520385913).
+- `ui-redesign` functional commit: `29a0624`; **44 server tests on Python 3.9**, native tests, all 14 UIKit scenarios including GPS-waiting/zero altitude and stale readings, and the unsigned production iPhone build passed. [UI run](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35520421147), [telemetry/server run](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35520421114).
+- Both branches passed the flight/video preservation comparison. Published source blobs were hash-verified. Actual dashboard rendering scripts also passed checks for valid zero altitude, missing GPS, stale value expiry and six-decimal coordinates.
+- **Pending:** rebuild/install on the team's iPhone and verify the new readings/rate with the real Mavic Air 2. CI uses unsigned builds and simulated inputs.
