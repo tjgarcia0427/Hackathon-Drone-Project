@@ -1,85 +1,129 @@
-# Hackathon Drone Project — AI fall-response drone
+# Guardian Angel — AI-assisted drone observation
 
-**Claude Code Build Day · Miami · Sun 2026-09-20 · Breakthrough track**
+Hackathon prototype for Claude Code Build Day, Miami, September 20, 2026. A Watch/phone incident trigger supplies a location, a Python command center plans a supervised search, and a locally installed **iPhone app** connects that server to a **DJI Mavic Air 2**.
 
-A wearable reports a fall → the command center asks Claude to plan a search mission → a safety
-layer approves it → the drone (DJI Mavic Air 2) flies to the location → Claude drives the camera
-search (yaw / gimbal / move) until the person is found → dashboard shows **SUBJECT LOCATED**.
+**The current implementation uses iPhone + DJI Mobile SDK V4 iOS. Android is no longer part of the build plan.** We use DJI's app SDK; aircraft firmware is not modified.
 
-The breakthrough: **Claude Fable 5.1 is the search brain**, deciding each move from the live camera
-frame, while deterministic code keeps it inside hard safety limits.
+**Status:** native app source and Xcode project implemented; portable navigation and server tests pass. The app has not yet been compiled in Xcode or tested on an iPhone/aircraft. Treat Mac build, DJI registration, video, and hardware control as the next milestones.
 
+## How the pieces connect
+
+```mermaid
+flowchart LR
+    W[Watch or phone Shortcut] -->|Incident GPS over HTTP| S[Python server and Claude planner]
+    D[Operator dashboard] -->|Review and dispatch| S
+    S <-->|Commands and telemetry over WebSocket| I[iPhone bridge app]
+    I -->|JPEG camera frames over HTTP| S
+    I <-->|USB data cable| R[DJI RC-N1 controller]
+    R <-->|DJI radio link| A[Mavic Air 2]
 ```
-⌚/📱 iOS Shortcut ──POST /incident──▶ 🖥 server/app.py ──WS──▶ 📱 Android app (MSDK v4) ──▶ 🚁 Air 2
-                                       │  planner.py (Claude)        ◀── telemetry + JPEG frames ──┘
-                                       │  safety.py  (limits)
-                                       │  detector.py (YOLO, optional)
-                                       └─▶ dashboard  http://localhost:8000
+
+The server interprets images and chooses small actions. The iPhone validates those actions and runs a deterministic local flight-control loop through DJI's SDK. The pilot takes off manually and enables flight control locally on the iPhone before server commands can move the aircraft. Reconnecting never automatically re-arms it.
+
+The Watch trigger is a Shortcut/demo incident input. We have not built a Watch app or an integration with Apple's built-in fall-detection alerts. A visual "found" result is a candidate for human review; its current map coordinates are the aircraft's location, not a calculated location of the person.
+
+## Start here
+
+- **Mac/iPhone setup and staged tests:** [iphone-bridge/README.md](iphone-bridge/README.md).
+- **Teammate agent context and next tasks:** [docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md).
+- **Wire protocol and command semantics:** [docs/PROTOCOL.md](docs/PROTOCOL.md).
+- **Review and validation evidence:** [review](iphone-bridge/REVIEW.md), [validation](iphone-bridge/VALIDATION.md).
+
+## Devices and responsibilities
+
+| Device / owner | Responsibility |
+|---|---|
+| Teammate's Mac | Xcode, CocoaPods, DJI iOS app key, signing, installation and device logs |
+| iPhone with the pilot | Bridge app, USB connection to RC-N1, camera preview, local arm and STOP AI |
+| RC-N1 + Mavic Air 2 | Aircraft connection, manual takeoff, pilot takeover and DJI RTH |
+| Windows laptop or Mac server | Python server, detector, Claude API calls and operator dashboard |
+| Watch / incident phone | Shortcut sends incident location to the server |
+| Lorenzo / server side | Planner, detector, dashboard and incident flow |
+| TJ / iPhone side | Native bridge and coordinated protocol/integration changes |
+
+Development can happen remotely, but **the controller-connected iPhone must physically be beside the drone**. Your teammate's Mac and Watch cannot substitute for that phone. Keep the bridge app in the foreground; use a second device for the incident trigger/dashboard if needed.
+
+No App Store deployment is needed. Your teammate builds and installs onto a physical iPhone using Xcode signing. See the bridge guide for Personal Team limitations and exact setup. Pins: DJI SDK **4.16.2**, DJIWidget **1.6.8**, FlySafe resource **01.00.01.18**, deployment target **iOS 15+**. Compatibility with the actual Xcode/iOS/firmware still needs to be demonstrated.
+
+## Run the Python command center
+
+From the repository root, on Windows PowerShell:
+
+```powershell
+cd server
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+$env:ANTHROPIC_API_KEY = 'your-key'
+$env:CLAUDE_MODEL = 'your-available-model-id'
+$env:AUTO_DISPATCH = '0'
+python -m uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
-## Repo layout
-
-| path | what | owner |
-|---|---|---|
-| `server/app.py` | FastAPI command center: incident intake, dispatch, search loop, dashboard WS | Lorenzo |
-| `server/planner.py` | Claude calls: `plan_mission()` and `next_search_step()` (structured outputs) | Lorenzo |
-| `server/safety.py` | Hard limits (altitude, geofence, battery, step cap). Claude proposes, this approves | Lorenzo |
-| `server/detector.py` | Optional local YOLOv8n person detector | either |
-| `server/sim_drone.py` | Fake drone speaking the real protocol — run the whole demo with no aircraft | — |
-| `server/static/index.html` | Dashboard | Lorenzo |
-| `docs/PROTOCOL.md` | The WebSocket/HTTP contract the Android app must implement | both |
-| `android/` | DJI MSDK v4 app (fork of `dji-sdk/Mobile-SDK-Android` sample) | TJ |
-
-## Run it (no drone needed)
+On macOS:
 
 ```bash
 cd server
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-export ANTHROPIC_API_KEY=sk-ant-...          # from console.anthropic.com (event credits attach to an Org)
-
-uvicorn app:app --host 0.0.0.0 --port 8000   # terminal 1
-python sim_drone.py                          # terminal 2
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+export ANTHROPIC_API_KEY='your-key'
+export CLAUDE_MODEL='your-available-model-id'
+export AUTO_DISPATCH=0
+python -m uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
-Open http://localhost:8000 → **Simulate fall (dev)** → **Dispatch drone**. Watch Claude search.
+Use an actual model ID available to your Anthropic account and compatible with the planner's structured-output call. The scaffold's default model name has not been validated. Keep API keys out of Git. Open the dashboard at `http://localhost:8000`; on the iPhone enter `http://YOUR-LAPTOP-IP:8000`.
 
-Real trigger from an iPhone/Apple Watch (no app build needed): Shortcuts → new shortcut →
-*Get Current Location* → *Get Contents of URL* (POST, JSON: `latitude`, `longitude`, `accuracy`
-from the location, `source: "watch"`) to `http://<laptop-ip>:8000/incident`. Add it to the watch face.
+Current `server/app.py` already includes the iPhone integration: command expiry, fresh-frame/telemetry checks, disconnect cancellation, reset/stop behavior, and RTH completion timeout. **Do not reapply `iphone-bridge/server-support/patch_server.py` to current main.** It is retained as a reviewed migration for the original scaffold only.
 
-Env knobs: `CLAUDE_MODEL` (default `claude-fable-5-1`), `AUTO_DISPATCH=1` to skip the operator button.
+Use a private LAN/hotspot or an authenticated private VPN. The command center has no authentication; do not expose port 8000 through a public tunnel. For remote collaboration the server can also run beside the pilot. HTTP and WebSocket connectivity must work in both directions over the chosen network.
 
-## Tonight (Sat) checklist
+## Local tests and demo sequence
 
-- [ ] DJI developer account → create app → App Key (instant) — https://developer.dji.com
-- [ ] Anthropic Console **Organization** exists (credits attach to the Org, not claude.ai)
-- [ ] **Android phone** (8–13) + USB cable for the RC-N1. MSDK v4 is Android-first; iOS v4 is abandoned
-- [ ] Clone `dji-sdk/Mobile-SDK-Android` (**v4**, not V5), drop the App Key in, build, confirm the Air 2 registers
-- [ ] `server/` runs against `sim_drone.py` end to end with your API key
-- [ ] Check DJI GEO zones for the venue — Air 2 may refuse takeoff near MIA / Class B. Plan to demo on the
-      MSDK simulator (DJI Assistant 2, aircraft on USB) + outdoor clip if needed
+1. **Server-only simulation:** run `python sim_drone.py` from `server/` in another terminal. Use the dashboard's development incident and dispatch controls. This checks the existing server workflow without DJI hardware; it does not validate the iPhone.
+2. **iPhone mock mode:** build/install the app, then follow the mock-only smoke server instructions in the bridge README. This separate server has no Claude costs. Check camera uploads, command acknowledgments, movement math, STOP and reconnect. It rejects live hardware.
+3. **Bench connection:** stop the simulator/smoke server, start the project server, remove propellers, and verify DJI registration, telemetry, decoded camera preview and camera-only gimbal control.
+4. **Supervised flight:** record a valid ground GPS anchor in the bridge, take off manually with the RC, position within the demo envelope, enable flight locally, and verify short commands and physical takeover before dispatching an incident mission.
 
-## Tomorrow build order (6 h)
+Only one drone connection is allowed. Stop `sim_drone.py` before connecting the iPhone. Restart the project server when switching mock/live or changing launch locations, because the home anchor persists for that server session.
 
-1. **0:00–0:30** — both: server + sim running on the venue Wi‑Fi; Shortcut fires a real incident
-2. **0:30–3:30** — TJ: Android agent → WS connect, telemetry, `gimbal`, `yaw`, `hold`, `rtl`, frame POST.
-   `goto`/`move` last (virtual stick). Lorenzo: tune prompts/safety with the sim, dashboard polish, YOLO if cheap
-3. **3:30–4:30** — integrate on the MSDK simulator; run the full loop 3× clean
-4. **4:30–5:15** — outdoor run if airspace/wx allow, or record the simulator run
-5. **5:15–6:00** — demo script, fallback video, 2‑minute pitch
+For the Watch/phone Shortcut: get current location, then POST JSON to `http://YOUR-SERVER:8000/incident` with `latitude`, `longitude`, `accuracy`, and `source: "watch"`. Confirm location/network access on the device. Keep `AUTO_DISPATCH=0`: the dashboard operator reviews and dispatches the resulting plan. A mock event can be sent with:
 
-## Demo script (2 min)
+```json
+{"latitude":25.7618,"longitude":-80.1918,"accuracy":5,"source":"demo"}
+```
 
-1. Watch face → tap **Fall** → dashboard flashes FALL DETECTED with GPS
-2. Claude's mission plan appears → safety layer stamps APPROVED (show one rejected plan for effect)
-3. **Dispatch** → drone climbs and flies to the point
-4. Search loop log: Claude's observation per step, yaw sweep, gimbal down, one move
-5. **SUBJECT LOCATED — 11.4 m from report · 94 %** → drone holds
-6. Close: "Claude isn't chatting. It's flying the search. The old model couldn't hold this loop."
+Those sample coordinates are for the simulator/iPhone mock start at `25.7617,-80.1918`; replace them with the real, nearby demo location for hardware testing.
 
-## Safety / legal (for the pitch, and for real)
+## Operating envelope
 
-- Human pilot on the sticks with VLOS at all times; the RC overrides the app instantly
-- Part 107 / recreational rules apply; no flight over people; respect GEO zones
-- Claude never issues raw motor commands — `safety.py` validates every step against fixed limits
+The planner requests roughly 10 m altitude, a 5–10 m demo search radius, and moves of at most 5 m. The server requires target plus search radius within 35 m of home; each move endpoint must remain within 35 m. Use an incident within about 20 m of launch. A small demonstration radius may not cover the full GPS uncertainty and is not an exhaustive rescue search.
+
+The iPhone independently enforces a 40 m ground-anchor radius, 5–30 m relative altitude, 1 m/s horizontal and 0.5 m/s vertical speed, and a 10°/s yaw rate. It requires 30% battery to enable/new navigation and releases control below 25% or when monitored telemetry/link/lifecycle checks fail. These checks do not provide obstacle or terrain avoidance.
+
+**STOP AI requests release of app flight control. It does not stop motors or cancel DJI-managed return-to-home.** RTH uses the aircraft's configured home and altitude, which can extend outside the app's virtual-stick envelope. The pilot checks those settings before launch and uses the RC to cancel RTH or take over. Force-killing/suspending iOS or losing the cable cannot be made safe by an app-only watchdog; aircraft failsafes and pilot supervision remain required.
+
+## Suggested 5–6 hour session
+
+| Time | Milestone |
+|---|---|
+| First 45–60 min | Mac dependency resolution, Xcode build/install, DJI registration and telemetry |
+| Next 60 min | Camera/gimbal bench tests while server teammate checks model access and incident flow |
+| Next 60 min | Mock transport checks, command limits, STOP and reconnect; connect the real server |
+| Next 60–90 min | Controlled short-command hardware tests if earlier milestones pass |
+| Remaining time | Supervised demo, logs, explanation and recording; use clearly labelled simulation if hardware validation remains incomplete |
+
+## Repository layout
+
+```text
+server/                         Python command center, planner, safety, detector, simulator, dashboard
+iphone-bridge/ios/              Native app, Xcode project, CocoaPods and Mac setup
+iphone-bridge/tools/            Mock-only transport server
+iphone-bridge/tests/            Navigation, server-integration and transport checks
+iphone-bridge/server-support/   Migration patch for the original scaffold
+docs/PROTOCOL.md                Current iPhone/server contract
+docs/AGENT_HANDOFF.md           Teammate context and remaining device validation
+```
+
+Work directly on `main` as requested by the team; this project is not using pull requests. Coordinate edits before replacing files another teammate is changing.
