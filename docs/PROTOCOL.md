@@ -21,11 +21,21 @@ First message:
 
 `mode` is `mock` for simulated hardware. The mock smoke server rejects live mode. The project server accepts both; the operator is responsible for selecting the intended mode.
 
-Telemetry is sent about once per second when GPS, the ground anchor, and telemetry freshness are valid:
+Navigation telemetry is sent about five times per second when GPS, the ground anchor, and telemetry freshness are valid:
 
 ```json
 {"type":"telemetry","drone_id":"air2","latitude":25.7617,"longitude":-80.1918,"altitude_m":10.0,"heading_deg":135.0,"gimbal_pitch_deg":-60.0,"battery_pct":78,"status":"idle","home_latitude":25.7617,"home_longitude":-80.1918}
 ```
+
+Full navigation packets also include a nested `aircraft` observation object. When navigation is unavailable, the phone sends only:
+
+```json
+{"type":"aircraft_status","aircraft":{"drone_id":"air2","mock":false,"aircraft_connected":true,"latitude":null,"longitude":null,"altitude_m":0.0,"altitude_reference":"takeoff","heading_deg":135,"battery_pct":78,"gimbal_pitch_deg":0,"gps_ok":false,"ground_anchor_ok":false,"gps_signal_level":2,"satellites":5,"flying":false,"fc_age_ms":20,"battery_age_ms":100,"gimbal_age_ms":30}}
+```
+
+`aircraft_status` is **display-only**. It never creates navigation state, sets server home or refreshes navigation readiness. Altitude/heading remain available without GPS; missing/stale numbers are `null`. The server exposes the independently aged object as `aircraft` in `/state`, dashboard state and dashboard telemetry messages. `navigation_age_ms` describes the age of the last complete navigation packet (or `null` if absent), including for older simulator clients. Source ages are milliseconds; FC/gimbal expire at 1500 ms and battery at 5000 ms. The dashboard ages them further between messages. Partial observations do not replace the `drone` used for dispatch/planning.
+
+The five-Hz schedule sends the latest SDK observations; sensor timing and connectivity still limit actual freshness. Slow dashboard delivery is coalesced and does not block drone message ingestion. See [telemetry fix and bench checks](TELEMETRY_FIX.md).
 
 Coordinates use decimal degrees. Altitude is metres relative to takeoff, not altitude above terrain or sea level. Heading/bearing is compass degrees clockwise from north. Bridge status is `idle`, `searching` while a command is active, or `rtl`; it does not attest that the phone is armed. Arm/disarm state is shown locally on the iPhone.
 

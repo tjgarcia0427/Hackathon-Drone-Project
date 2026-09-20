@@ -26,6 +26,7 @@ import geometry
 import planner
 import safety
 import watch_alerts
+import telemetry_display
 from watch_alerts import WatchAlert
 from models import DroneState, FallEvent, MissionPlan, SearchStep
 from pydantic import BaseModel, ConfigDict, Field
@@ -48,6 +49,8 @@ class State:
         self.plan: MissionPlan | None = None
         self.plan_verdict: safety.Verdict | None = None
         self.drone: DroneState | None = None
+        self.aircraft_readout: dict | None = None
+        self.aircraft_readout_at = 0.0
         self.home: tuple[float, float] | None = None  # iPhone ground anchor; simulator falls back to first fix
         self.phase = "idle"  # idle | planned | dispatched | searching | found | aborted
         self.log: list[dict] = []
@@ -61,6 +64,18 @@ class State:
         self.dash: set[WebSocket] = set()
         self.pending_acks: dict[str, asyncio.Future] = {}
         self.search_task: asyncio.Task | None = None
+        self.telemetry_updates = telemetry_display.LatestTelemetry(self.dash, self.telemetry_payload)
+
+    def display_readout(self) -> dict | None:
+        return telemetry_display.age_readout(self.aircraft_readout, time.monotonic()-self.aircraft_readout_at)
+
+    def telemetry_payload(self) -> dict:
+        return {"type": "telemetry", "drone": self.drone.model_dump() if self.drone else None,
+                "aircraft": self.display_readout(), "navigation_age_ms": self.navigation_age_ms()}
+
+    def navigation_age_ms(self) -> float | None:
+        received = getattr(self, "telemetry_at", 0.0)
+        return max(0, time.monotonic()-received)*1000 if received else None
 
     def snapshot(self) -> dict:
         return {
@@ -73,6 +88,8 @@ class State:
             "plan_ok": self.plan_verdict.ok if self.plan_verdict else None,
             "plan_reason": self.plan_verdict.reason if self.plan_verdict else None,
             "drone": self.drone.model_dump() if self.drone else None,
+            "aircraft": self.display_readout(),
+            "navigation_age_ms": self.navigation_age_ms(),
             "drone_connected": self.drone_ws is not None,
             "detector": detector.available(),
             "found": self.found,
@@ -584,6 +601,8 @@ async def ws_drone(ws: WebSocket) -> None:
         return
     S.frame_epoch = getattr(S, "frame_epoch", 0) + 1
     S.drone = None
+    S.aircraft_readout = None
+    S.aircraft_readout_at = 0.0
     S.telemetry_at = 0.0
     S.latest_frame = S.latest_detection = None
     S.latest_frame_at = 0.0
@@ -594,13 +613,20 @@ async def ws_drone(ws: WebSocket) -> None:
         while True:
             msg = json.loads(await ws.receive_text())
             t = msg.get("type")
-            if t == "telemetry":
+            if t in ("telemetry", "aircraft_status") and isinstance(msg.get("aircraft"), dict):
+                S.aircraft_readout = telemetry_display.clean_readout(msg["aircraft"])
+                S.aircraft_readout_at = time.monotonic()
+            if t == "aircraft_status":
+                # A GPS-less observation is display-only: do not create DroneState,
+                # record a home point or refresh navigation readiness.
+                S.telemetry_updates.publish()
+            elif t == "telemetry":
                 S.telemetry_at = time.monotonic()
                 S.drone = DroneState(**{k: v for k, v in msg.items() if k != "type"})
                 if S.home is None:
                     S.home = (float(msg.get("home_latitude", S.drone.latitude)), float(msg.get("home_longitude", S.drone.longitude)))
                     log(f"home set {S.home[0]:.6f},{S.home[1]:.6f}")
-                await broadcast({"type": "telemetry", "drone": S.drone.model_dump()})
+                S.telemetry_updates.publish()
             elif t == "ack":
                 fut = S.pending_acks.get(msg.get("cmd_id", ""))
                 if fut and not fut.done():
@@ -617,6 +643,8 @@ async def ws_drone(ws: WebSocket) -> None:
         S.watch.update(S.watch_event_id, "cancelled", "Aircraft disconnected; reset before another mission")
         await iphone_cancel_mission()
         S.drone_ws = None
+        S.aircraft_readout = None
+        S.aircraft_readout_at = 0.0
         S.telemetry_at = 0.0
         S.frame_epoch = getattr(S, "frame_epoch", 0) + 1
         for fut in list(S.pending_acks.values()):
@@ -635,7 +663,7 @@ async def ws_dashboard(ws: WebSocket) -> None:
         while True:
             await ws.receive_text()  # keepalive / ignore
     except WebSocketDisconnect:
-        S.dash.discard(ws)
+        S.telemetry_updates.remove(ws)
 
 
 @app.get("/")

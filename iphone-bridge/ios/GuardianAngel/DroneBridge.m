@@ -1,5 +1,6 @@
 #import "DroneBridge.h"
 #import "Navigation.h"
+#import "TelemetryDisplay.h" // display-only observations
 #import <DJISDK/DJISDK.h>
 #import <DJIWidget/DJIVideoPreviewer.h>
 #import <QuartzCore/QuartzCore.h>
@@ -16,6 +17,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
 }
 @interface DroneBridge () <DJISDKManagerDelegate,DJIFlightControllerDelegate,DJIBatteryDelegate,DJIGimbalDelegate,DJIVideoFeedListener,DJIVideoPreviewerFrameControlDelegate> {
     GAPose _pose, _home, _target;
+    GATelemetrySample _displaySample; // display-only observations
     BOOL _homeSet, _flying, _gps, _armed, _flightEnabled, _enabling, _mock, _closed;
     BOOL _snapshotPending, _returning, _rthAccepted, _releaseFailed;
     double _gimbal, _battery, _horizontalSpeed, _verticalSpeed;
@@ -50,6 +52,18 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     return self;
 }
 - (void)note:(NSString *)message { if(self.log) self.log(message); }
+// BEGIN display-only readout.
+- (NSDictionary *)aircraftReadout {
+    GATelemetrySample sample=_displaySample;
+    sample.latitude=_pose.lat; sample.longitude=_pose.lon;
+    if(_mock) { sample.altitude=_pose.altitude; sample.heading=_pose.heading; sample.gpsSignal=5; sample.satellites=16; }
+    sample.battery=_battery; sample.gimbal=_gimbal;
+    sample.fcTime=_fcTime; sample.batteryTime=_batteryTime; sample.gimbalTime=_gimbalTime;
+    sample.aircraft=_mock || self.fc!=nil; sample.mock=_mock;
+    sample.gps=_gps; sample.homeSet=_homeSet; sample.flying=_flying;
+    return GATelemetryReadout(sample,CACurrentMediaTime());
+}
+// END display-only readout.
 - (void)start {
     _lastTick=CACurrentMediaTime();
     if(_mock) {
@@ -124,6 +138,12 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     Main(^{
         if(fc!=self.fc || self->_closed) return;
         CLLocation *location=state.aircraftLocation;
+        // BEGIN display-only SDK observations (barometric altitude does not need GPS).
+        self->_displaySample.altitude=state.altitude;
+        self->_displaySample.heading=state.attitude.yaw;
+        self->_displaySample.gpsSignal=state.GPSSignalLevel;
+        self->_displaySample.satellites=state.satelliteCount;
+        // END display-only SDK observations.
         self->_gps=location && CLLocationCoordinate2DIsValid(location.coordinate) && state.GPSSignalLevel>=DJIGPSSignalLevel4 && state.GPSSignalLevel<=DJIGPSSignalLevel5;
         if(self->_gps) self->_pose=(GAPose){location.coordinate.latitude,location.coordinate.longitude,state.altitude,state.attitude.yaw};
         self->_flying=state.isFlying;
@@ -362,13 +382,20 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         else _stableSince=0;
     }
     if(_returning && !_flying && now-_fcTime<1.5) _returning=NO;
-    if(now-_lastReport>1) {
-        _lastReport=now;
+    // BEGIN display-only reporting. The complete navigation packet keeps its original gates.
+    if(GATelemetryReportDue(now,&_lastReport)) {
+        NSDictionary *readout=[self aircraftReadout];
         NSString *status=_returning?@"rtl":self.active?@"searching":@"idle";
         if(_gps && _homeSet && GAValidPose(_pose) && now-_fcTime<1.5 && now-_batteryTime<5 && _battery>=0)
-            [self.client send:@{@"type":@"telemetry",@"drone_id":@"air2",@"latitude":@(_pose.lat),@"longitude":@(_pose.lon),@"altitude_m":@(_pose.altitude),@"heading_deg":@(fmod(_pose.heading+360,360)),@"gimbal_pitch_deg":@(_gimbal),@"battery_pct":@(_battery),@"status":status,@"home_latitude":@(_home.lat),@"home_longitude":@(_home.lon)}];
-        if(self.updated) self.updated([NSString stringWithFormat:@"%@ • %@\nBattery %.0f%% • Alt %.1f m • Heading %.0f°\nGPS %@ • Ground anchor %@ • %@",_mock?@"MOCK":self.aircraft?@"Mavic Air 2":@"No aircraft",self.client.connected?@"Server online":@"Server offline",_battery,_pose.altitude,_pose.heading,_gps?@"OK":@"waiting",_homeSet?@"OK":@"waiting",_returning?@"DJI RETURNING":_flightEnabled?@"FLIGHT ENABLED":_armed?@"CAMERA ONLY":@"DISARMED"]);
+            [self.client send:@{@"type":@"telemetry",@"drone_id":@"air2",@"latitude":@(_pose.lat),@"longitude":@(_pose.lon),@"altitude_m":@(_pose.altitude),@"heading_deg":@(fmod(_pose.heading+360,360)),@"gimbal_pitch_deg":@(_gimbal),@"battery_pct":@(_battery),@"status":status,@"home_latitude":@(_home.lat),@"home_longitude":@(_home.lon),@"aircraft":readout}];
+        else
+            [self.client send:@{@"type":@"aircraft_status",@"aircraft":readout}];
+        NSString *(^value)(NSString *,NSString *)=^NSString *(NSString *key,NSString *format) {
+            id number=readout[key]; return [number isKindOfClass:NSNumber.class]?[NSString stringWithFormat:format,[number doubleValue]]:@"—";
+        };
+        if(self.updated) self.updated([NSString stringWithFormat:@"%@ • %@\nBattery %@ • Alt %@ (takeoff) • Heading %@\nPosition %@, %@\nGPS %@ • Ground anchor %@ • %@",_mock?@"MOCK":self.aircraft?@"Mavic Air 2":@"No aircraft",self.client.connected?@"Server online":@"Server offline",value(@"battery_pct",@"%.0f%%"),value(@"altitude_m",@"%.1f m"),value(@"heading_deg",@"%.0f°"),value(@"latitude",@"%.6f"),value(@"longitude",@"%.6f"),[readout[@"gps_ok"] boolValue]?@"OK":@"waiting",_homeSet?@"OK":@"waiting",_returning?@"DJI RETURNING":_flightEnabled?@"FLIGHT ENABLED":_armed?@"CAMERA ONLY":@"DISARMED"]);
     }
+    // END display-only reporting.
     if(now-_lastFrame>=1 && self.client.connected) { _lastFrame=now; [self frame]; }
 }
 - (void)frame {

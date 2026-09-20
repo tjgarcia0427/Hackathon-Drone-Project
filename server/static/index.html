@@ -106,10 +106,15 @@
     </div>
   </section>
 </main>
+<script src="/static/telemetry-display.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const escapeHTML = v => String(v ?? "").replace(/[&<>"\']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","\'":"&#39;"}[c]));
-const kv = (el, obj) => { el.innerHTML = obj ? Object.entries(obj).map(([k,v]) => `<span>${escapeHTML(k)}</span><span>${escapeHTML(typeof v==='number'? +v.toFixed(6) : v)}</span>`).join('') : '<span>—</span><span></span>'; };
+const telemetryDisplay=new AircraftTelemetryDisplay();
+function renderTelemetry() { kv($('drone'),telemetryDisplay.read(performance.now())); }
+function receiveTelemetry(message) { telemetryDisplay.update(message,performance.now()); renderTelemetry(); }
+setInterval(renderTelemetry,200);
+const kv = (el, obj) => { el.innerHTML = obj ? Object.entries(obj).map(([k,v]) => `<span>${escapeHTML(k)}</span><span>${escapeHTML(v==null?'—':typeof v==='number'? +v.toFixed(6) : v)}</span>`).join('') : '<span>—</span><span></span>'; };
 function render(s) {
   renderAI(s);
   renderWatchAlerts(s.watch_alerts || []);
@@ -118,7 +123,7 @@ function render(s) {
   $('dronetxt').textContent = s.drone_connected ? (s.drone?.drone_id || 'drone') + ' connected' : 'no drone';
   kv($('incident'), s.incident);
   kv($('plan'), s.plan ? {...s.plan, safety: s.plan_ok ? 'APPROVED' : 'REJECTED: ' + s.plan_reason} : null);
-  kv($('drone'), s.drone);
+  receiveTelemetry(s);
   $('log').innerHTML = (s.log || []).map(fmtLog).join('');
   $('log').scrollTop = 1e9;
   if (s.found) { $('foundBanner').style.display='block'; $('foundBanner').textContent = foundText(s.found); }
@@ -169,12 +174,12 @@ function connect() {
     if (m.type==='state') render(m.state);
     else if (m.type==='watch_alert') receiveWatchAlert(m.alert);
     else if (m.type==='log') { $('log').insertAdjacentHTML('beforeend', fmtLog(m.entry)); $('log').scrollTop=1e9; }
-    else if (m.type==='telemetry') kv($('drone'), m.drone);
+    else if (m.type==='telemetry') receiveTelemetry(m);
     else if (m.type==='step') { renderStep(m); if(m.step?.action==='found' && m.ok) showEvidence(); }
     else if (m.type==='frame') { if(evidence) return; $('cam').src = '/frame.jpg?t=' + Date.now(); $('cam').onload=drawBoxes;
       $('det').textContent = 'detector: ' + (m.detection ? (m.detection.person ? `${(m.detection.persons||[1]).length} PERSON(S), best ${(m.detection.confidence*100).toFixed(0)}% ${JSON.stringify(m.detection.bbox)}` : 'no person') : 'not installed (visual AI only)'); }
   };
-  ws.onclose = () => setTimeout(connect, 1500);
+  ws.onclose = () => { receiveTelemetry({drone_connected:false}); setTimeout(connect, 1500); };
 }
 async function post(path, body) {
   const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:body?JSON.stringify(body):undefined});

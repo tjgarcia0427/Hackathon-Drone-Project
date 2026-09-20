@@ -1,5 +1,7 @@
 # Guardian Angel — AI-assisted drone observation
 
+**Telemetry update:** iPhone observations now report at about 5 Hz; altitude and heading display without a GPS lock. Pull, restart the server and rebuild the iPhone app. See [the fix, protocol notes and bench check](docs/TELEMETRY_FIX.md).
+
 Hackathon prototype for Claude Code Build Day, Miami, September 20, 2026. A Watch/phone incident trigger supplies a location, a Python command center plans a supervised search, and a locally installed **iPhone app** connects that server to a **DJI Mavic Air 2**.
 
 **The current implementation uses iPhone + DJI Mobile SDK V4 iOS. Android is no longer part of the build plan.** We use DJI's app SDK; aircraft firmware is not modified.
