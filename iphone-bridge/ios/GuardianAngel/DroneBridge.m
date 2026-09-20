@@ -144,7 +144,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     if(_closed || _mock) return;
     _videoTime=CACurrentMediaTime();
     static NSUInteger feedBytes=0; static double feedLogged=0; feedBytes+=videoData.length;
-    if(_videoTime-feedLogged>5) { feedLogged=_videoTime; [self note:[NSString stringWithFormat:@"Video feed: %lu bytes so far, decoding %@",(unsigned long)feedBytes,[DJIVideoPreviewer instance].videoSize.width>0?@"OK":@"no frames yet"]]; }
+    if(_videoTime-feedLogged>5) { feedLogged=_videoTime; [self note:[NSString stringWithFormat:@"Video feed: %lu bytes so far, previewer status %d",(unsigned long)feedBytes,(int)[DJIVideoPreviewer instance].status.isRunning]]; }
     [[DJIVideoPreviewer instance] push:(uint8_t *)videoData.bytes length:(int)videoData.length];
 }
 - (NSString *)flightProblem {
