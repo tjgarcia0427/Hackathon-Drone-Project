@@ -13,6 +13,13 @@ struct ShakeDetector {
         lastPeak = -Double.infinity
     }
 
+    // Only the alert flow may release this cooldown after cancellation before
+    // any POST. Ordinary motion restarts still preserve the cooldown.
+    mutating func cancelBeforeSending() {
+        lastTrigger = -Double.infinity
+        reset()
+    }
+
     mutating func sample(magnitude: Double, time: TimeInterval) -> Bool {
         guard magnitude.isFinite, time.isFinite else { return false }
         if magnitude < 0.45 { armed = true }
@@ -27,6 +34,17 @@ struct ShakeDetector {
         reset()
         return true
     }
+}
+
+struct HelpCooldown {
+    private var lastTrigger = Date.distantPast
+    func ready(now: Date = Date()) -> Bool { now.timeIntervalSince(lastTrigger) >= 30 }
+    mutating func begin(now: Date = Date()) -> Bool {
+        guard ready(now: now) else { return false }
+        lastTrigger = now
+        return true
+    }
+    mutating func cancelBeforeSending() { lastTrigger = .distantPast }
 }
 
 enum LocationPolicy {

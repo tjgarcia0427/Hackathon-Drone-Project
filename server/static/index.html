@@ -20,7 +20,7 @@
   .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-family:ui-monospace,Menlo,monospace; font-size:13px; }
   .kv span:first-child { color:var(--dim); }
   .camwrap { position:relative; }
-  img#cam { width:100%; border-radius:8px; background:#000; aspect-ratio:16/9; object-fit:cover; display:block; }
+  img#cam, img#decision-image { width:100%; border-radius:8px; background:#000; aspect-ratio:16/9; object-fit:cover; display:block; }
   canvas#boxes { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
   #people { margin-top:6px; font-family:ui-monospace,Menlo,monospace; font-size:12px; }
   #people div { padding:2px 0; }
@@ -45,6 +45,7 @@
   .watch-alert a { color:var(--acc); }
   @media(max-width:760px) { main { grid-template-columns:1fr; } header { flex-wrap:wrap; } }
 </style>
+<link rel="stylesheet" href="/static/telemetry-panel.css">
 </head>
 <body>
 <header>
@@ -53,6 +54,11 @@
   <span style="margin-left:auto"><span id="dronedot" class="dot"></span><span id="dronetxt">no drone</span></span>
 </header>
 <main>
+  <div class="aircraft-overview" aria-labelledby="aircraft-title">
+    <h2 id="aircraft-title">Aircraft stats <span id="telemetry-badge" class="telemetry-badge">Waiting for aircraft</span></h2>
+    <dl id="aircraft-stats" class="aircraft-stats"></dl>
+    <p class="aircraft-note">Altitude is relative to takeoff. Coordinates use decimal degrees. Missing or stale readings show —.</p>
+  </div>
   <section>
     <div id="foundBanner" class="found-banner"></div>
     <div class="panel" style="margin-bottom:16px">
@@ -63,9 +69,14 @@
     </div>
     <div class="panel">
       <h2 id="camTitle">Live camera</h2>
-      <div class="camwrap"><img id="cam" src="" alt="waiting for frames"><canvas id="boxes"></canvas></div>
+      <div class="camwrap"><img id="cam" src="" alt="waiting for frames"></div>
       <div id="det" style="margin-top:6px;color:var(--dim)">detector: —</div>
-      <div id="people"></div>
+      <div id="decision-panel" hidden>
+        <h3 id="decision-title">Last AI decision</h3>
+        <div class="camwrap"><img id="decision-image" alt="Image reviewed by the AI"><canvas id="boxes"></canvas></div>
+        <p id="decision-status"></p>
+        <div id="people"></div>
+      </div>
     </div>
     <div class="panel" style="margin-top:16px">
       <h2>Controls</h2>
@@ -97,21 +108,18 @@
       <div id="plan" class="kv"><span>—</span><span></span></div>
     </div>
     <div class="panel" style="margin-top:16px">
-      <h2>Drone</h2>
-      <div id="drone" class="kv"><span>—</span><span></span></div>
-    </div>
-    <div class="panel" style="margin-top:16px">
       <h2>Log</h2>
       <div id="log"></div>
     </div>
   </section>
 </main>
 <script src="/static/telemetry-display.js"></script>
+<script src="/static/telemetry-panel.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const escapeHTML = v => String(v ?? "").replace(/[&<>"\']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","\'":"&#39;"}[c]));
 const telemetryDisplay=new AircraftTelemetryDisplay();
-function renderTelemetry() { kv($('drone'),telemetryDisplay.read(performance.now())); }
+function renderTelemetry() { AircraftTelemetryPanel.render($('aircraft-stats'),$('telemetry-badge'),telemetryDisplay.read(performance.now())); }
 function receiveTelemetry(message) { telemetryDisplay.update(message,performance.now()); renderTelemetry(); }
 setInterval(renderTelemetry,200);
 const kv = (el, obj) => { el.innerHTML = obj ? Object.entries(obj).map(([k,v]) => `<span>${escapeHTML(k)}</span><span>${escapeHTML(v==null?'—':typeof v==='number'? +v.toFixed(6) : v)}</span>`).join('') : '<span>—</span><span></span>'; };
@@ -128,7 +136,7 @@ function render(s) {
   $('log').scrollTop = 1e9;
   if (s.found) { $('foundBanner').style.display='block'; $('foundBanner').textContent = foundText(s.found); }
   else $('foundBanner').style.display='none';
-  if (s.last_step) { renderStep(s.last_step); if (s.found && !evidence) showEvidence(); } else clearBoxes();
+  if (s.last_step) renderStep(s.last_step); else clearBoxes();
 }
 function foundText(f) {
   const subj = f.subject;
@@ -138,12 +146,31 @@ function foundText(f) {
   const n = f.people_in_frame != null ? `${f.people_in_frame} ${f.people_in_frame===1?'person':'people'} in frame — ` : '';
   return `SUBJECT LOCATED — ${n}${where} · confidence ${(f.confidence*100).toFixed(0)}% · drone holding · operator review`;
 }
-let lastStep=null, evidence=false;
-// On a found, freeze the camera on the exact frame the AI judged so the boxes match what the operator sees.
-function showEvidence() { evidence=true; $('cam').src='/step.jpg?t='+Date.now(); $('cam').onload=drawBoxes; $('camTitle').textContent='Evidence frame (AI decision) — reset for live'; }
-function clearBoxes() { lastStep=null; if(evidence){ evidence=false; $('camTitle').textContent='Live camera'; } const c=$('boxes'); c.getContext('2d').clearRect(0,0,c.width,c.height); $('people').textContent=''; }
+let lastStep=null, loadedStep=null;
+function clearCanvas() { const c=$('boxes'); c.getContext('2d').clearRect(0,0,c.width,c.height); }
+function clearBoxes() { lastStep=loadedStep=null; clearCanvas(); $('decision-panel').hidden=true; $('people').textContent=''; }
+function loadDecision(st) {
+  loadedStep=null; clearCanvas(); $('decision-panel').hidden=false;
+  $('decision-title').textContent='Last AI decision · '+(st.ok?'accepted':'rejected');
+  const stamp=Number.isFinite(st.judged_at)?new Date(st.judged_at*1000).toLocaleTimeString():'';
+  $('decision-status').textContent='Loading the image reviewed at '+stamp+'…';
+  const img=$('decision-image');
+  if(!st.decision_id) { $('decision-status').textContent='Update/restart the server to load matched decision images.'; return; }
+  const src=new URL('/step.jpg?decision_id='+encodeURIComponent(st.decision_id),location.href).href;
+  img.onload=()=>{
+    if(lastStep?.decision_id!==st.decision_id || img.currentSrc!==src) return;
+    if(!st.frame || img.naturalWidth!==st.frame[0] || img.naturalHeight!==st.frame[1]) {
+      $('decision-status').textContent='Image size mismatch; boxes hidden.'; return;
+    }
+    loadedStep=st; drawBoxes();
+    $('decision-status').textContent='Decision image · '+stamp+' · '+(st.ok?'accepted for the next step':'rejected: '+st.reason)+'. This is separate from the live feed.';
+  };
+  img.onerror=()=>{ if(lastStep?.decision_id===st.decision_id) { loadedStep=null; clearCanvas(); $('decision-status').textContent='Decision image superseded or unavailable. Waiting for the next decision.'; } };
+  img.src=src;
+}
 function renderStep(st) {
-  lastStep=st; drawBoxes();
+  if(lastStep?.decision_id && lastStep.decision_id===st.decision_id) return;
+  lastStep=st; loadDecision(st);
   const cs=st.candidates||[]; const chosen=st.step?.chosen_index;
   const head=`${cs.length} ${cs.length===1?'person':'people'} in frame`+(cs.length? (chosen!=null?` — subject: #${chosen+1}`:' — no subject chosen'):'')+(st.ok?'':` — REJECTED: ${st.reason}`);
   const rows=cs.map(c=>{ const d=document.createElement('div'); d.className=c.chosen?'pick':'other';
@@ -153,13 +180,15 @@ function renderStep(st) {
   $('people').replaceChildren(h,...rows);
 }
 function drawBoxes() {
-  const c=$('boxes'), img=$('cam'); if(!lastStep||!lastStep.frame) return;
-  const [fw,fh]=lastStep.frame; const W=img.clientWidth, H=img.clientHeight; if(!W||!H) return;
+  const c=$('boxes'), img=$('decision-image'); clearCanvas(); if(!loadedStep||!loadedStep.frame) return;
+  const [fw,fh]=loadedStep.frame; const W=img.clientWidth, H=img.clientHeight; if(!W||!H) return;
   c.width=W; c.height=H; const ctx=c.getContext('2d'); ctx.clearRect(0,0,W,H);
   // object-fit:cover — compute the drawn scale/offset so boxes land on the pixels they describe
   const sc=Math.max(W/fw,H/fh), ox=(W-fw*sc)/2, oy=(H-fh*sc)/2;
-  for(const cd of lastStep.candidates||[]) {
-    const [x1,y1,x2,y2]=cd.bbox; const col=cd.chosen?'#2ecc71':'#f39c12';
+  for(const cd of loadedStep.candidates||[]) {
+    const [x1,y1,x2,y2]=cd.bbox;
+    if(![x1,y1,x2,y2].every(Number.isFinite)||x1<0||y1<0||x2<=x1||y2<=y1||x2>fw||y2>fh) continue;
+    const col=cd.chosen?'#2ecc71':'#f39c12';
     ctx.lineWidth=cd.chosen?3:2; ctx.strokeStyle=col; ctx.strokeRect(ox+x1*sc,oy+y1*sc,(x2-x1)*sc,(y2-y1)*sc);
     ctx.fillStyle=col; ctx.font='bold 12px ui-monospace,Menlo,monospace';
     ctx.fillText(`#${cd.index+1} ${cd.posture} ${(cd.subject_confidence*100).toFixed(0)}%`, ox+x1*sc+3, Math.max(12,oy+y1*sc-4));
@@ -175,8 +204,8 @@ function connect() {
     else if (m.type==='watch_alert') receiveWatchAlert(m.alert);
     else if (m.type==='log') { $('log').insertAdjacentHTML('beforeend', fmtLog(m.entry)); $('log').scrollTop=1e9; }
     else if (m.type==='telemetry') receiveTelemetry(m);
-    else if (m.type==='step') { renderStep(m); if(m.step?.action==='found' && m.ok) showEvidence(); }
-    else if (m.type==='frame') { if(evidence) return; $('cam').src = '/frame.jpg?t=' + Date.now(); $('cam').onload=drawBoxes;
+    else if (m.type==='step') renderStep(m);
+    else if (m.type==='frame') { $('cam').src = '/frame.jpg?t=' + Date.now();
       $('det').textContent = 'detector: ' + (m.detection ? (m.detection.person ? `${(m.detection.persons||[1]).length} PERSON(S), best ${(m.detection.confidence*100).toFixed(0)}% ${JSON.stringify(m.detection.bbox)}` : 'no person') : 'not installed (visual AI only)'); }
   };
   ws.onclose = () => { receiveTelemetry({drone_connected:false}); setTimeout(connect, 1500); };
@@ -247,7 +276,7 @@ function renderAI(s) {
   const key=JSON.stringify([s.ai.provider,s.ai.model]);
   if(key!==activeAI) {
     $('ai-provider').replaceChildren(...aiOptions.map(o=>{ const option=document.createElement('option'); option.value=o.provider; option.textContent=o.label; return option; }));
-    $('ai-provider').value=s.ai.provider; $('ai-model').value=s.ai.model; activeAI=key;
+    $('ai-provider').value=s.ai.provider; $('ai-model').value=s.ai.model; $('ai-model').placeholder=s.ai.provider.endsWith('_api')?'Enter API model ID':'CLI default (optional)'; activeAI=key;
   }
   const locked=s.phase!=='idle' || s.planning;
   for(const id of ['ai-provider','ai-model','ai-apply']) $(id).disabled=locked;

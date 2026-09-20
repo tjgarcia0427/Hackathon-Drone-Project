@@ -38,7 +38,7 @@ def default_model(provider: str) -> str:
         "codex": ("CODEX_MODEL", ""),
         "claude_code": ("CLAUDE_CODE_MODEL", ""),
         "openai_api": ("OPENAI_MODEL", ""),
-        "anthropic_api": ("CLAUDE_MODEL", "claude-fable-5-1"),
+        "anthropic_api": ("CLAUDE_MODEL", ""),
     }[provider]
     return os.environ.get(key, fallback).strip()
 
@@ -60,7 +60,7 @@ class Settings:
 
     def public(self) -> dict:
         return {"provider": self.provider, "label": PROVIDERS[self.provider],
-                "model": self.model, "effective_model": self.effective_model or "CLI default",
+                "model": self.model, "effective_model": self.effective_model or ("Choose an API model" if self.provider.endswith("_api") else "CLI default"),
                 "billing": "subscription" if self.provider in ("codex", "claude_code") else "api"}
 
 

@@ -104,7 +104,12 @@ S = State()
 def log(msg: str, **extra: Any) -> None:
     entry = {"t": time.time(), "msg": msg, **extra}
     S.log.append(entry)
-    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+    line = f"[{time.strftime('%H:%M:%S')}] {msg}"
+    try:
+        print(line, flush=True)
+    except UnicodeEncodeError:
+        # A Windows console's code page must not abort a mission on ✓/✗.
+        print(line.encode('ascii', errors='backslashreplace').decode('ascii'), flush=True)
     asyncio.get_event_loop().create_task(broadcast({"type": "log", "entry": entry}))
 
 
@@ -412,11 +417,13 @@ async def frame_jpg():
 
 
 @app.get("/step.jpg")
-async def step_jpg():
+async def step_jpg(decision_id: str | None = None):
     """The frame the last AI decision was based on — the evidence an operator reviews on 'found'."""
     from fastapi.responses import Response
     if not S.step_frame:
         raise HTTPException(404)
+    if decision_id is not None and (S.last_step is None or S.last_step.get("decision_id") != decision_id):
+        raise HTTPException(409, "decision frame was superseded; wait for the latest decision")
     return Response(S.step_frame, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
@@ -450,12 +457,15 @@ async def dev_cmd(body: dict) -> dict:
         raise HTTPException(400, "yaw needs deg -180..180")
     if action == "move":
         bearing, dist = params.get("bearing"), params.get("dist")
-        if not (isinstance(bearing, (int, float)) and isinstance(dist, (int, float))):
+        if type(bearing) not in (int, float) or type(dist) not in (int, float):
             raise HTTPException(400, "move needs bearing 0..<360 and dist 0..5")
-        if S.drone is None or S.home is None:
+        if S.drone is None or S.home is None or not iphone_telemetry_ready():
             raise HTTPException(409, "move needs live telemetry and a ground anchor (home)")
-        step = SearchStep(action="move", move_bearing_deg=float(bearing), move_distance_m=float(dist),
-                          observation="dev bench move")
+        try:
+            step = SearchStep(action="move", move_bearing_deg=float(bearing), move_distance_m=float(dist),
+                              observation="dev bench move")
+        except ValueError as exc:
+            raise HTTPException(400, "move needs bearing 0..<360 and dist 0..5") from exc
         verdict = safety.check_step(step, S.drone, *S.home, 0)
         if not verdict.ok:
             raise HTTPException(400, f"move refused: {verdict.reason}")
@@ -542,16 +552,20 @@ async def run_mission() -> None:
             ), planner.search_timeout())
             if not iphone_telemetry_ready() or time.monotonic() - frame_at > planner.search_timeout() + 5.0:
                 raise RuntimeError("planner result based on stale frame/telemetry")
-            verdict = safety.check_step(step, S.drone, *home, step_no)
             frame_dims = geometry.frame_size(judged_frame)
+            verdict = safety.check_step(step, S.drone, *home, step_no, frame_size=frame_dims)
+            if step.action == "found" and frame_dims is None:
+                verdict = safety.Verdict(False, "cannot verify candidate boxes without a valid image size")
             S.step_frame = judged_frame
             candidates = describe_candidates(step, frame_dims, S.drone, plan)
             desc = (f"step {step_no + 1}: {step.action} "
                     f"{step.model_dump(exclude_none=True, exclude={'action', 'observation', 'candidates', 'chosen_index'})} "
                     f"[{summarize_candidates(candidates, step.chosen_index)}] — {step.observation}")
-            S.history.append(desc)
+            S.history.append(desc if verdict.ok else
+                             f"{desc} [REJECTED: {verdict.reason}. Do not repeat this decision; reassess the candidates or change the view within the allowed limits.]")
             log(("✓ " if verdict.ok else f"✗ ({verdict.reason}) ") + desc)
             S.last_step = {"step": step.model_dump(), "candidates": candidates, "frame": frame_dims,
+                           "decision_id": uuid.uuid4().hex, "judged_at": time.time(),
                            "ok": verdict.ok, "reason": verdict.reason}
             await broadcast({"type": "step", **S.last_step})
             if not verdict.ok:

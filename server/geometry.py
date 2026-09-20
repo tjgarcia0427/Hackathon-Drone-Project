@@ -13,6 +13,7 @@ import os
 from dataclasses import dataclass
 
 from safety import haversine_m, offset_latlng
+from models import valid_bbox
 
 # DJI Air 2 main camera: 84° diagonal on a 4:3 sensor; a 16:9 video frame crops the vertical.
 # Horizontal FOV is what matters for a 16:9 frame; override for another airframe.
@@ -48,14 +49,13 @@ def bbox_ground_point(bbox: list[int], frame_w: int, frame_h: int, *, altitude_m
     The ground contact is the bottom-centre of the box (feet / body on the ground), not the box centre.
     Returns None when the ray does not hit the ground within MAX_GROUND_RANGE_M.
     """
-    if len(bbox) != 4 or frame_w <= 0 or frame_h <= 0 or altitude_m <= 0:
+    if not valid_bbox(bbox, (frame_w, frame_h)) or frame_w <= 0 or frame_h <= 0 or altitude_m <= 0:
         return None
     x1, y1, x2, y2 = (float(v) for v in bbox)
     if not all(math.isfinite(v) for v in (x1, y1, x2, y2, altitude_m, heading_deg, gimbal_pitch_deg)):
         return None
     u = ((x1 + x2) / 2) / frame_w        # 0..1 left→right
     v = max(y1, y2) / frame_h            # 0..1 top→bottom, bottom edge of the box
-    u, v = min(1.0, max(0.0, u)), min(1.0, max(0.0, v))
 
     tan_h = math.tan(math.radians(HFOV_DEG / 2))
     tan_v = tan_h * frame_h / frame_w    # square pixels

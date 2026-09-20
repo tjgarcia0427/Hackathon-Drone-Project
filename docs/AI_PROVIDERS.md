@@ -103,7 +103,7 @@ On macOS use `export NAME='value'` instead of PowerShell's `$env:NAME = 'value'`
 - `AI_PROVIDER` defaults to `anthropic_api` for older checkouts' launch scripts. Set it explicitly for subscription use.
 - `AI_MODEL` selects the initial model for the chosen provider. Otherwise provider-specific defaults are `CODEX_MODEL`, `CLAUDE_CODE_MODEL`, `OPENAI_MODEL`, or the existing `CLAUDE_MODEL`.
 - Blank model for either subscription option uses the CLI's normal default. Codex ignores user project/tool configuration for these calls and uses low reasoning effort. For explicit model selection, use a model your account can access.
-- OpenAI API requires a model ID. Anthropic retains the original scaffold's `claude-fable-5-1` fallback for compatibility, but that fallback has not been validated; enter an available model explicitly.
+- Both API providers require an explicit model ID available to your account. The unvalidated Anthropic scaffold fallback has been removed. Blank subscription models still use the signed-in CLI default.
 - **Apply** changes the running server's provider/model in memory. Restarting restores environment settings. Reset the mission and wait for in-flight planning/commands to finish before changing providers. Failed configuration leaves the old provider selected.
 - “Configuration detected” checks local prerequisites, not remote account/model access. Run the smoke test to verify live inference.
 - If an executable is not found, fix `PATH` or set `CODEX_BIN` / `CLAUDE_BIN` to its full native executable path. Official npm wrappers are resolved without invoking a shell; older `.js` entries need Node.js on `PATH`.
@@ -127,3 +127,8 @@ python -m unittest discover -s . -p "test_*.py" -v
 Claude subscription and both API providers still need live tests with the team's accounts. Xcode compilation and physical phone/drone testing remain outstanding. See [AGENT_HANDOFF.md](AGENT_HANDOFF.md) for teammate context.
 
 Implementation references: [Codex non-interactive execution](https://developers.openai.com/codex/noninteractive), [Codex authentication](https://developers.openai.com/codex/auth), [OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs), [Claude Code programmatic usage](https://code.claude.com/docs/en/headless), [Claude CLI flags](https://code.claude.com/docs/en/cli-reference).
+
+
+## Explicit demo launch
+
+From `server/`, run `python start_demo.py --provider claude_code` (or `codex`). This requires an explicit provider and checks configuration/login before starting. Add `--model YOUR_MODEL_ID` to select a model; API providers require a model and their environment key. The launcher does not run inference. On `main`, `ai_smoke_test.py --provider YOUR_PROVIDER --search-check` now tests candidate output using one prone figure plus two upright figures and reports the configured search deadline. Re-measure live timing after these schema changes. See [review handoff](REVIEW_FIXES_2026-09-20.md).

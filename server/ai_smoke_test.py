@@ -22,7 +22,7 @@ def main():
     parser.add_argument("--model", default=None)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check-only", action="store_true", help="Check configuration/login without a model call")
-    mode.add_argument("--search-check", action="store_true", help="Use the real search prompt/schema and 8-second deadline, without a drone")
+    mode.add_argument("--search-check", action="store_true", help="Use the real search schema with one prone figure and two upright figures, without a drone")
     args = parser.parse_args()
     current = ai_backends.from_environment()
     settings = ai_backends.Settings(args.provider or current.provider,
@@ -45,8 +45,17 @@ def main():
             from models import DroneState
             planner.configure(settings.provider, settings.model)
             drone = DroneState(latitude=25.7617, longitude=-80.1918, altitude_m=10, heading_deg=0)
-            decision = planner.next_search_step(drone, data.getvalue(), None, [], drone.latitude, drone.longitude)
-            correct = decision.action != "found" and safety.check_step(decision, drone, drone.latitude, drone.longitude, 0).ok
+            from sim_drone import Sim
+            from models import valid_bbox
+            scene = Sim((drone.latitude, drone.longitude), (drone.latitude, drone.longitude), bystanders=2)
+            scene.alt, scene.gimbal = 10, -75
+            drone.gimbal_pitch_deg = -75
+            decision = planner.next_search_step(drone, scene.frame(), None, [], drone.latitude, drone.longitude)
+            correct = (len(decision.candidates) >= 3
+                       and any(c.posture == "prone" for c in decision.candidates)
+                       and any(c.posture == "upright" for c in decision.candidates)
+                       and all(valid_bbox(c.bbox, (640, 360)) for c in decision.candidates)
+                       and safety.check_step(decision, drone, drone.latitude, drone.longitude, 0, frame_size=(640, 360)).ok)
         else:
             decision = ai_backends.generate(settings, ImageCheck,
                 "Describe only the attached test image. Return the requested structured result. Do not use tools.",
@@ -55,7 +64,9 @@ def main():
         elapsed = time.monotonic() - started
         print(json.dumps({"ok": correct, **settings.public(), "seconds": round(elapsed, 2),
                           "search_check": args.search_check,
-                          "within_search_deadline": elapsed < 8, "result": decision.model_dump(),
+                          "within_search_deadline": elapsed < planner.search_timeout() if args.search_check else None,
+                          "search_timeout_seconds": planner.search_timeout() if args.search_check else None,
+                          "result": decision.model_dump(),
                           "note": "Synthetic-image test only; no drone connection or flight command"}, indent=2))
         if not correct:
             raise SystemExit(1)

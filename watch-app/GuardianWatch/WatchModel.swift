@@ -18,7 +18,7 @@ final class WatchModel: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var sending = false
     private var lastReceiptBase: URL?
     private var active = false
-    private var lastTrigger = Date.distantPast
+    private var cooldown = HelpCooldown()
     private var flowTask: Task<Void, Never>?
     private let motion = CMMotionManager()
     private var detector = ShakeDetector()
@@ -71,11 +71,10 @@ final class WatchModel: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     func trigger(source: String) {
         guard active, !busy, pending == nil else { return }
-        guard Date().timeIntervalSince(lastTrigger) >= 30 else {
+        guard cooldown.begin() else {
             status = "30-second help cooldown. Wait before sending again."
             return
         }
-        lastTrigger = Date()
         let started = Date(), useTestMode = testMode, address = serverURL
         busy = true
         lastReceipt = nil
@@ -111,11 +110,16 @@ final class WatchModel: NSObject, ObservableObject, CLLocationManagerDelegate {
                 sending = true
                 status = "Sending… Receipt not yet confirmed."
                 try await deliver(item)
-            } catch is CancellationError { status = "Cancelled before sending. No alert sent." }
-            catch {
-                status = pending == nil ? "No alert sent: \(error.localizedDescription)"
-                    : "Delivery unconfirmed: \(error.localizedDescription). Retry uses the same alert."
-                WKInterfaceDevice.current().play(.failure)
+            } catch {
+                if (error is CancellationError || Task.isCancelled) && pending == nil {
+                    cooldown.cancelBeforeSending()
+                    detector.cancelBeforeSending()
+                    status = "Cancelled before sending. No alert sent. Ready for another button or shake."
+                } else {
+                    status = pending == nil ? "No alert sent: \(error.localizedDescription)"
+                        : "Delivery unconfirmed: \(error.localizedDescription). Retry uses the same alert."
+                    WKInterfaceDevice.current().play(.failure)
+                }
             }
         }
     }
@@ -194,7 +198,8 @@ final class WatchModel: NSObject, ObservableObject, CLLocationManagerDelegate {
             let magnitude = sqrt(a.x * a.x + a.y * a.y + a.z * a.z)
             let time = data.timestamp
             Task { @MainActor [weak self] in
-                guard let self = self, self.active, self.shakeEnabled, !self.busy, self.pending == nil else { return }
+                guard let self = self, self.active, self.shakeEnabled, !self.busy, self.pending == nil,
+                      self.cooldown.ready() else { return }
                 if self.detector.sample(magnitude: magnitude, time: time) { self.trigger(source: "watch_shake") }
             }
         }

@@ -1,12 +1,14 @@
 # Guardian Angel — AI-assisted drone observation
 
+**Dashboard and review update:** key aircraft stats are now at the top of the dashboard; repeated iPhone video-byte logging is removed. See [review fixes, validation and teammate handoff](docs/REVIEW_FIXES_2026-09-20.md).
+
 **Telemetry update:** iPhone observations now report at about 5 Hz; altitude and heading display without a GPS lock. Pull, restart the server and rebuild the iPhone app. See [the fix, protocol notes and bench check](docs/TELEMETRY_FIX.md).
 
 Hackathon prototype for Claude Code Build Day, Miami, September 20, 2026. A Watch/phone incident trigger supplies a location, a Python command center plans a supervised search, and a locally installed **iPhone app** connects that server to a **DJI Mavic Air 2**.
 
 **The current implementation uses iPhone + DJI Mobile SDK V4 iOS. Android is no longer part of the build plan.** We use DJI's app SDK; aircraft firmware is not modified.
 
-**Status:** the native Watch app **compiles and links in Xcode CI**, its Swift core tests pass, and all 64 server tests pass. See [Watch validation](watch-app/VALIDATION.md). Signed installation and real GPS/motion/network tests on the team's SE remain. The iPhone bridge compiles and links with its pinned DJI libraries in macOS CI, and its telemetry/navigation tests pass. Lorenzo reported successful telemetry, gimbal control, live video and a mock mission on real hardware. The new telemetry fix still needs the [hardware bench check](docs/TELEMETRY_FIX.md).
+**Status:** the native Watch app **compiles and links in Xcode CI**, its Swift core tests pass, and all 74 server tests pass. See [Watch validation](watch-app/VALIDATION.md). Signed installation and real GPS/motion/network tests on the team's SE remain. The iPhone bridge compiles and links with its pinned DJI libraries in macOS CI, and its telemetry/navigation tests pass. Lorenzo reported successful telemetry, gimbal control, live video and a mock mission on real hardware. The new telemetry fix still needs the [hardware bench check](docs/TELEMETRY_FIX.md).
 
 ## How the pieces connect
 
@@ -22,7 +24,7 @@ flowchart LR
 
 The server interprets images and chooses small actions. The iPhone validates those actions and runs a deterministic local flight-control loop through DJI's SDK. The pilot takes off manually and enables flight control locally on the iPhone before server commands can move the aircraft. Reconnecting never automatically re-arms it.
 
-The native **Watch app** now provides Send Help and a deliberate shake gesture, a five-second cancel countdown, location capture, receipts/retries and default-on Test mode. Shake runs only while the app is active; it is not Apple's built-in fall detection. See [Watch setup and first test](docs/WATCH_SETUP.md). A visual "found" result is a candidate for human review. With several people in frame the AI lists every person and must pick one clearly-preferred prone/motionless candidate (server-enforced, see [PROTOCOL.md](docs/PROTOCOL.md#subject-disambiguation-multiple-people-in-frame)); the dashboard draws the boxes and shows an estimated subject distance from the reported point (bbox projected to the ground — an estimate, while `found.lat/lng` remain the aircraft's location).
+The native **Watch app** now provides Send Help and a deliberate shake gesture, a five-second cancel countdown, location capture, receipts/retries and default-on Test mode. Shake runs only while the app is active; it is not Apple's built-in fall detection. See [Watch setup and first test](docs/WATCH_SETUP.md). A visual "found" result is a candidate for human review. With several people in frame the AI lists every person and must pick one clearly preferred prone or sitting candidate reported as not moving (the server checks the reported posture/motion, both confidence scores and the score margin; these are AI reports, not independently verified facts, see [PROTOCOL.md](docs/PROTOCOL.md#subject-disambiguation-multiple-people-in-frame)); the dashboard draws the boxes and shows an estimated subject distance from the reported point (bbox projected to the ground — an estimate, while `found.lat/lng` remain the aircraft's location).
 
 ## Start here
 

@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from typing import Literal, Optional
-from pydantic import BaseModel, Field
+import math
+from pydantic import BaseModel, Field, field_validator
 
 
 class FallEvent(BaseModel):
@@ -16,7 +17,7 @@ class FallEvent(BaseModel):
 
 
 class DroneState(BaseModel):
-    """Telemetry pushed by the drone app every ~1s."""
+    """Complete navigation telemetry pushed by the iPhone at about 5 Hz."""
     drone_id: str = "air2"
     latitude: float
     longitude: float
@@ -45,6 +46,27 @@ class PersonCandidate(BaseModel):
     is_moving: bool = Field(description="appears to be walking/moving compared with earlier frames; false if unknown")
     subject_confidence: float = Field(ge=0, le=1, description="how likely THIS person is the reported subject")
     reason: str = Field(description="one short sentence: why this person is or is not the subject")
+
+    @field_validator("bbox", mode="before")
+    @classmethod
+    def pixel_coordinates(cls, value):
+        # Vision responses can contain 10.0 or subpixel coordinates even with
+        # an integer JSON schema. Normalize numbers only; never strings/bools.
+        if isinstance(value, list):
+            return [round(v) if type(v) is float and math.isfinite(v) else v for v in value]
+        return value
+
+
+def valid_bbox(bbox, frame_size=None) -> bool:
+    """An ordered, nonempty pixel box; bounds include the image's outer edges."""
+    if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+        return False
+    if not all(type(v) in (int, float) and math.isfinite(v) for v in bbox):
+        return False
+    x1, y1, x2, y2 = bbox
+    if not (0 <= x1 < x2 and 0 <= y1 < y2):
+        return False
+    return frame_size is None or (x2 <= frame_size[0] and y2 <= frame_size[1])
 
 
 class SearchStep(BaseModel):

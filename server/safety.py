@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from models import DroneState, MissionPlan, SearchStep
+from models import DroneState, MissionPlan, SearchStep, valid_bbox
 
 LIMITS = {
     "max_altitude_m": 30.0,
@@ -62,7 +62,7 @@ def check_mission(plan: MissionPlan, home_lat: float, home_lng: float, drone: Dr
     return Verdict(True)
 
 
-def check_step(step: SearchStep, drone: DroneState, home_lat: float, home_lng: float, step_no: int) -> Verdict:
+def check_step(step: SearchStep, drone: DroneState, home_lat: float, home_lng: float, step_no: int, *, frame_size=None) -> Verdict:
     if step_no >= LIMITS["max_search_steps"]:
         return Verdict(False, "max search steps reached")
     if not math.isfinite(drone.battery_pct) or drone.battery_pct < LIMITS["min_battery_pct"]:
@@ -87,11 +87,11 @@ def check_step(step: SearchStep, drone: DroneState, home_lat: float, home_lng: f
     if step.action == "gimbal" and (step.gimbal_pitch_deg is None or not math.isfinite(step.gimbal_pitch_deg) or not -90 <= step.gimbal_pitch_deg <= 0):
         return Verdict(False, "gimbal pitch must be -90..0 degrees")
     if step.action == "found":
-        return check_found(step)
+        return check_found(step, frame_size=frame_size)
     return Verdict(True)
 
 
-def check_found(step: SearchStep) -> Verdict:
+def check_found(step: SearchStep, *, frame_size=None) -> Verdict:
     """A 'found' must name one clearly-preferred candidate. Ambiguity keeps the search going."""
     candidates = list(getattr(step, "candidates", None) or [])
     chosen = getattr(step, "chosen_index", None)
@@ -105,11 +105,17 @@ def check_found(step: SearchStep) -> Verdict:
         bbox = list(getattr(c, "bbox", None) or [])
         if len(bbox) != 4 or not all(isinstance(v, int) and not isinstance(v, bool) for v in bbox):
             return Verdict(False, "candidate bbox must be four integers")
+        if not valid_bbox(bbox, frame_size):
+            return Verdict(False, "candidate bbox must be ordered, nonempty and inside the supplied frame")
         if not math.isfinite(c.subject_confidence):
             return Verdict(False, "candidate confidence invalid")
     pick = candidates[chosen]
     if pick.posture not in ("prone", "sitting"):
         return Verdict(False, f"chosen candidate is {pick.posture}, not down")
+    if pick.is_moving:
+        return Verdict(False, "chosen candidate is reported moving; change the view or choose another candidate")
+    if pick.subject_confidence < LIMITS["min_found_confidence"]:
+        return Verdict(False, "chosen candidate confidence is below the found threshold")
     others = [c.subject_confidence for i, c in enumerate(candidates) if i != chosen]
     if others and pick.subject_confidence - max(others) < LIMITS["min_candidate_margin"]:
         return Verdict(False, f"ambiguous: another candidate within {LIMITS['min_candidate_margin']:.2f}")
