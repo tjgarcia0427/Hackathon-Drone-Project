@@ -5,6 +5,7 @@ on:
     paths:
       - 'iphone-bridge/**'
       - 'server/**'
+      - 'integrations/openclaw/**'
       - '.github/workflows/telemetry-checks.yml'
   workflow_dispatch:
 permissions:
@@ -29,6 +30,8 @@ jobs:
           fetch-depth: 0
       - name: Verify flight and video preservation
         run: python3 iphone-bridge/tests/check_telemetry_preservation.py
+      - name: Test production agent takeoff confirmation methods
+        run: python3 iphone-bridge/tests/agent_takeoff_request_test.py
       - name: Test native observations and navigation limits
         run: |
           xcrun clang -fobjc-arc -framework Foundation -Iiphone-bridge/ios/GuardianAngel iphone-bridge/tests/telemetry_display_test.m -o /tmp/telemetry_display_test
@@ -40,6 +43,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Test OpenClaw plugin contracts
+        if: github.ref_name == 'main'
+        run: node --test integrations/openclaw/test/*.test.mjs
       - name: Test dashboard freshness and zero altitude
         run: |
           node server/test_telemetry_display.js

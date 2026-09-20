@@ -12,3 +12,7 @@ watch-app/Config/Local.xcconfig
 watch-app/**/xcuserdata/
 watch-app/build/
 watch-app/DerivedData/
+
+
+# Local mission memory / evidence; never commit location history or secrets.
+server/data/

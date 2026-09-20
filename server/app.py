@@ -27,6 +27,8 @@ import planner
 import safety
 import watch_alerts
 import telemetry_display
+import agent_api
+from models import valid_bbox as models_valid_bbox
 from watch_alerts import WatchAlert
 from models import DroneState, FallEvent, MissionPlan, SearchStep
 from pydantic import BaseModel, ConfigDict, Field
@@ -80,6 +82,8 @@ class State:
     def snapshot(self) -> dict:
         return {
             "watch_alerts": self.watch.recent(),
+            "agent": agent_api.summary(self),
+            "mission_driver": os.getenv("GA_MISSION_DRIVER", "builtin"),
             "phase": self.phase,
             "planning": self.planning,
             "ai": planner.status(),
@@ -205,7 +209,7 @@ async def ai_status() -> dict:
 
 @app.post("/ai/config")
 async def ai_config(config: AIConfiguration) -> dict:
-    if S.phase != "idle" or S.planning or (S.search_task and not S.search_task.done()) or S.pending_acks:
+    if agent_api.active(S) or S.phase != "idle" or S.planning or (S.search_task and not S.search_task.done()) or S.pending_acks:
         raise HTTPException(409, "Reset and wait for active planning/commands before changing AI provider")
     try:
         result = planner.configure(config.provider, config.model)
@@ -217,7 +221,7 @@ async def ai_config(config: AIConfiguration) -> dict:
 
 
 def begin_incident(fall: FallEvent, watch_event_id: str | None = None) -> int:
-    if S.planning or (S.search_task and not S.search_task.done()) or S.pending_acks:
+    if agent_api.active(S) or S.planning or (S.search_task and not S.search_task.done()) or S.pending_acks:
         raise HTTPException(409, "planning/search/command already in progress")
     S.watch.update(S.watch_event_id, "cancelled", "Superseded by a new operator incident")
     S.plan_epoch += 1
@@ -263,6 +267,8 @@ async def complete_incident(fall: FallEvent, epoch: int) -> dict:
 @app.post("/incident")
 async def incident(fall: FallEvent) -> dict:
     """Legacy Shortcut/dashboard endpoint, waits for planning as before."""
+    if os.getenv("GA_MISSION_DRIVER", "builtin") == "openclaw":
+        raise HTTPException(409, "OpenClaw driver selected: start an agent mission or send a Watch alert")
     epoch = begin_incident(fall)
     return await complete_incident(fall, epoch)
 
@@ -273,7 +279,8 @@ async def watch_status() -> dict:
             "max_event_age_seconds": watch_alerts.MAX_EVENT_AGE,
             "max_location_age_seconds": watch_alerts.MAX_LOCATION_AGE,
             "max_accuracy_m": watch_alerts.MAX_LOCATION_ACCURACY,
-            "auto_dispatch": AUTO_DISPATCH}
+            "auto_dispatch": AUTO_DISPATCH and os.getenv("GA_MISSION_DRIVER", "builtin") != "openclaw",
+            "mission_driver": os.getenv("GA_MISSION_DRIVER", "builtin")}
 
 
 @app.get("/watch/alerts/{event_id}")
@@ -315,13 +322,15 @@ async def watch_alert(event: WatchAlert) -> dict:
     if not -watch_alerts.FUTURE_TOLERANCE <= event.age() <= watch_alerts.MAX_EVENT_AGE:
         raise HTTPException(422, "Alert is too old or its clock is ahead; send a new alert")
     problem = event.location_problem()
-    busy = S.phase != "idle" or S.planning or (S.search_task and not S.search_task.done()) or S.pending_acks
+    busy = agent_api.active(S) or S.phase != "idle" or S.planning or (S.search_task and not S.search_task.done()) or S.pending_acks
     if event.test_mode:
         status, message = "test_received", "Test alert received; no mission created"
     elif problem:
         status, message = "location_rejected", problem
     elif busy:
         status, message = "busy", "Help alert received; current mission preserved. No mission queued"
+    elif os.getenv("GA_MISSION_DRIVER", "builtin") == "openclaw":
+        status, message = "awaiting_agent", "Help alert received; awaiting operator-started OpenClaw mission"
     else:
         status, message = "planning", "Help alert received; preparing an operator-reviewed plan"
     try:
@@ -343,6 +352,8 @@ async def watch_alert(event: WatchAlert) -> dict:
 @app.post("/dispatch")
 async def dispatch() -> dict:
     """Operator hits the button (or AUTO_DISPATCH=1)."""
+    if agent_api.active(S) or os.getenv("GA_MISSION_DRIVER", "builtin") == "openclaw":
+        raise HTTPException(409, "OpenClaw owns this mission; stop it before built-in dispatch")
     if not S.plan or not S.plan_verdict or not S.plan_verdict.ok:
         raise HTTPException(400, "no approved mission")
     if S.drone_ws is None:
@@ -373,6 +384,9 @@ async def dispatch() -> dict:
 
 @app.post("/abort")
 async def abort() -> dict:
+    if agent_api.active(S):
+        await agent_api.invalidate(S, "Dashboard abort; control released to pilot")
+        return {"ok": True, "note": "Agent stopped; use RC to return/land"}
     S.watch.update(S.watch_event_id, "cancelled", "Operator aborted this mission")
     S.plan_epoch += 1
     await iphone_cancel_mission()
@@ -444,7 +458,7 @@ async def dev_cmd(body: dict) -> dict:
     """
     if os.environ.get("DEV_COMMANDS", "0") != "1":
         raise HTTPException(403, "set DEV_COMMANDS=1 to enable the bench command endpoint")
-    if S.search_task and not S.search_task.done():
+    if agent_api.active(S) or (S.search_task and not S.search_task.done()):
         raise HTTPException(409, "mission active; dev commands disabled")
     action = str(body.get("action", ""))
     allowed = {"gimbal", "hold", "stop", "yaw", "move"}
@@ -481,6 +495,7 @@ async def dev_cmd(body: dict) -> dict:
 
 @app.post("/reset")
 async def reset() -> dict:
+    await agent_api.invalidate(S, "Dashboard reset")
     S.watch.update(S.watch_event_id, "cancelled", "Operator reset this mission")
     S.watch_event_id = None
     S.plan_epoch += 1
@@ -635,6 +650,7 @@ async def ws_drone(ws: WebSocket) -> None:
     S.telemetry_at = 0.0
     S.latest_frame = S.latest_detection = None
     S.latest_frame_at = 0.0
+    S.agent_control, S.agent_control_at = {}, 0.0
     S.drone_ws = ws
     log("drone connected")
     await push_state()
@@ -642,6 +658,9 @@ async def ws_drone(ws: WebSocket) -> None:
         while True:
             msg = json.loads(await ws.receive_text())
             t = msg.get("type")
+            if t in ("telemetry", "aircraft_status"):
+                S.agent_control = msg.get("control") if isinstance(msg.get("control"), dict) else {}
+                S.agent_control_at = time.monotonic()
             if t in ("telemetry", "aircraft_status") and isinstance(msg.get("aircraft"), dict):
                 S.aircraft_readout = telemetry_display.clean_readout(msg["aircraft"])
                 S.aircraft_readout_at = time.monotonic()
@@ -668,6 +687,8 @@ async def ws_drone(ws: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
+        await agent_api.invalidate(S, "Aircraft disconnected")
+        S.agent_control, S.agent_control_at = {}, 0.0
         S.plan_epoch += 1
         S.watch.update(S.watch_event_id, "cancelled", "Aircraft disconnected; reset before another mission")
         await iphone_cancel_mission()
@@ -701,3 +722,7 @@ async def index():
 
 
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
+
+# Explicit agent routes; no model credentials or background reasoning inside the server.
+import sys
+agent_api.install(app, sys.modules[__name__])

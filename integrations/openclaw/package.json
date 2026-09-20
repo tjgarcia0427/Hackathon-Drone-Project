@@ -1,0 +1,11 @@
+{
+  "name": "@guardian-angel/openclaw-drone",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.16.0" },
+  "peerDependencies": { "openclaw": ">=2026.3.24-beta.2" },
+  "files": ["*.mjs", "openclaw.plugin.json"],
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "openclaw": { "extensions": ["./index.mjs"] }
+}

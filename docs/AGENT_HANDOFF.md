@@ -1,5 +1,13 @@
 # Guardian Angel — teammate agent handoff
 
+## Latest: OpenClaw mission integration
+
+See [OPENCLAW_INTEGRATION.md](OPENCLAW_INTEGRATION.md) for architecture, setup and remaining hardware checks. Main now includes the optional native OpenClaw tool plugin and token-protected `/agent/*` routes. Default permission ceiling is observe-only; a mission lease, observation IDs, action IDs and command acknowledgements separate reasoning from flight control. Request-takeoff opens an expiring iPhone pilot confirmation and never arms flight. The server/plugin live on main; matching phone changes are also on ui-redesign, without merging the redesigned UI into main. Run the main server with either phone build.
+
+Use a dedicated `guardian-angel` agent and the provided workspace instructions. OpenClaw's own image-capable model/auth handles reasoning, independently of the dashboard AI selector. With `GA_MISSION_DRIVER=openclaw`, Watch alerts wait for an operator-started agent mission; no automatic wake-up or launch is implemented. Memory and candidate JPEGs stay in ignored `server/data/agent/`. Never commit tokens or that directory.
+
+Next: runtime-inspect the plugin on the team's installed Gateway, verify one real camera image in an observe-only mission, run props-off gimbal/confirmation tests, then the supervised outdoor takeoff/1 m movement trial. Preserve OcuSync video fixes, pilot enable and STOP behavior. Offline suites pass; live flight and the team's Gateway must still be checked.
+
 ## Goal and current decisions
 
 Build a supervised fall-response/observation demo using Mavic Air 2, a native iPhone bridge, a Python command center with selectable AI and a native Watch button/shake help trigger (legacy Shortcut still supported). The team has moved off the Android route. Use the existing DJI iOS SDK; do not modify aircraft firmware. Work directly on `main`, with no PR workflow, as explicitly requested by TJ. Preserve and coordinate concurrent teammate edits.

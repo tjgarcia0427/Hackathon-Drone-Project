@@ -1,5 +1,7 @@
 # Guardian Angel — AI-assisted drone observation
 
+**OpenClaw integration:** a dedicated agent can receive real JPEG observations, keep mission notes and request bounded camera/flight actions. Takeoff requests require confirmation on the iPhone. Start with observe-only mode; see [setup, first test and teammate handoff](docs/OPENCLAW_INTEGRATION.md).
+
 **Dashboard and review update:** key aircraft stats are now at the top of the dashboard; repeated iPhone video-byte logging is removed. See [review fixes, validation and teammate handoff](docs/REVIEW_FIXES_2026-09-20.md).
 
 **Telemetry update:** iPhone observations now report at about 5 Hz; altitude and heading display without a GPS lock. Pull, restart the server and rebuild the iPhone app. See [the fix, protocol notes and bench check](docs/TELEMETRY_FIX.md).
@@ -22,7 +24,7 @@ flowchart LR
     R <-->|DJI radio link| A[Mavic Air 2]
 ```
 
-The server interprets images and chooses small actions. The iPhone validates those actions and runs a deterministic local flight-control loop through DJI's SDK. The pilot takes off manually and enables flight control locally on the iPhone before server commands can move the aircraft. Reconnecting never automatically re-arms it.
+The built-in server planner or the optional OpenClaw mission agent interprets images and chooses small actions. The iPhone validates those actions and runs a deterministic local flight-control loop through DJI's SDK. The pilot takes off manually and enables flight control locally on the iPhone before server commands can move the aircraft. Reconnecting never automatically re-arms it.
 
 The native **Watch app** now provides Send Help and a deliberate shake gesture, a five-second cancel countdown, location capture, receipts/retries and default-on Test mode. Shake runs only while the app is active; it is not Apple's built-in fall detection. See [Watch setup and first test](docs/WATCH_SETUP.md). A visual "found" result is a candidate for human review.
 

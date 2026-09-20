@@ -71,6 +71,15 @@
     self.bridge=[[DroneBridge alloc] initWithPreview:self.preview mock:self.mockSwitch.on];
     __weak typeof(self) weakSelf=self;
     self.bridge.log=^(NSString *s){[weakSelf append:s];};
+    self.bridge.takeoffPrompt=^(NSString *identifier, void (^respond)(BOOL)) {
+        if(!weakSelf || weakSelf.presentedViewController || UIApplication.sharedApplication.applicationState!=UIApplicationStateActive) { respond(NO); return; }
+        UIAlertController *prompt=[UIAlertController alertControllerWithTitle:@"Agent requests takeoff" message:@"The agent is asking the pilot to launch. Confirm only with a clear launch area and the RC ready. This request expires in 20 seconds. DJI will rise to about 1.2 m; AI stays disabled. Then climb with the RC to 5-30 m and enable flight separately." preferredStyle:UIAlertControllerStyleAlert];
+        [prompt addAction:[UIAlertAction actionWithTitle:@"Decline" style:UIAlertActionStyleCancel handler:^(UIAlertAction *a){respond(NO);}]];
+        [prompt addAction:[UIAlertAction actionWithTitle:@"Take off" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a){respond(YES);}]];
+        __weak UIAlertController *weakPrompt=prompt;
+        weakSelf.bridge.dismissTakeoffPrompt=^{[weakPrompt dismissViewControllerAnimated:YES completion:nil];};
+        [weakSelf presentViewController:prompt animated:YES completion:nil];
+    };
     self.bridge.updated=^(NSString *s){weakSelf.status.text=s; NSString *reason=[weakSelf.bridge takeoffProblem]; weakSelf.takeoffButton.enabled=reason==nil; weakSelf.takeoffHelp.text=reason?:@"Ready for pilot takeoff. Confirm locally; AI stays disabled."; [weakSelf.stopButton setTitle:[weakSelf.bridge pilotTakeoffBusy]?@"STOP • cancel takeoff":@"STOP AI • return control to pilot" forState:UIControlStateNormal];};
     [self.bridge start];
 }

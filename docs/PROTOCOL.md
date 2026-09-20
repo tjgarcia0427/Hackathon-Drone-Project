@@ -37,9 +37,9 @@ Full navigation packets also include a nested `aircraft` observation object. Whe
 
 The five-Hz schedule sends the latest SDK observations; sensor timing and connectivity still limit actual freshness. Slow dashboard delivery is coalesced and does not block drone message ingestion. See [telemetry fix and bench checks](TELEMETRY_FIX.md).
 
-Coordinates use decimal degrees. Altitude is metres relative to takeoff, not altitude above terrain or sea level. Heading/bearing is compass degrees clockwise from north. Bridge status is `idle`, `searching` while a command is active, or `rtl`; it does not attest that the phone is armed. Arm/disarm state is shown locally on the iPhone.
+Coordinates use decimal degrees. Altitude is metres relative to takeoff, not altitude above terrain or sea level. Heading/bearing is compass degrees clockwise from north. Bridge status is `idle`, `searching` while a command is active, or `rtl`; it does not attest that the phone is armed. Arm/disarm state is shown locally on the iPhone; updated phones also report it in the `control` object below.
 
-The phone records home from valid GPS while on the ground. Start the bridge before takeoff. The local **Take off (pilot)** button retains that anchor and the server connection; it is not a protocol command. See [pilot takeoff](PILOT_TAKEOFF.md). The server uses `home_latitude`/`home_longitude`, falling back to the first telemetry coordinates for the older simulator. Restart the server when changing launch location or switching mock/live; resetting a mission does not reset its home reference.
+The phone records home from valid GPS while on the ground. Start the bridge before takeoff. The local **Take off (pilot)** button retains that anchor and the server connection; the agent protocol can request that same local confirmation but cannot launch without the pilot. See [pilot takeoff](PILOT_TAKEOFF.md). The server uses `home_latitude`/`home_longitude`, falling back to the first telemetry coordinates for the older simulator. Restart the server when changing launch location or switching mock/live; resetting a mission does not reset its home reference.
 
 Completion acknowledgments:
 
@@ -159,3 +159,19 @@ Test mode always produces `test_received` and no mission. Live events without GP
 `server/sim_drone.py` is the original server-only simulator and does not implement every iPhone interlock or RTH completion behavior. Use it to exercise the dashboard/planner, not to certify this protocol on hardware.
 
 For the iPhone wire contract, use the app's mock mode with `iphone-bridge/tools/smoke_server.py`; follow [the bridge test instructions](../iphone-bridge/README.md). Its `/command` endpoint sends commands and returns their acknowledgments, `/state` shows telemetry/JPEG byte count, and `/frame.jpg` shows a labelled mock image. This smoke server has no incident/planner flow and rejects live aircraft connections.
+
+## OpenClaw agent extension (protocol 1)
+
+`telemetry` and `aircraft_status` additionally carry `control`:
+
+```json
+{"control":{"camera_enabled":false,"flight_enabled":false,"takeoff_request_supported":true,"takeoff_ready":true,"takeoff_problem":"","takeoff_pending":false,"home":[25.7617,-80.1918]}}
+```
+
+This is observed phone state, never permission to arm. The server expires it after 3 seconds and requires it for agent commands. `home` is null until the phone has a ground anchor. Agent navigation uses this fresh phone anchor; the built-in simulator/home compatibility behavior remains unchanged.
+
+New wire action: `request_takeoff`, with `cmd_id` and mandatory `expires_at_ms`. Normal delivery expiry is 5 seconds. Receipt presents a pilot prompt; no local arming is required because launch requires disarmed controls. The prompt expires after 20 seconds. Confirmation rechecks every local takeoff condition and invokes the existing pilot takeoff implementation. Ack is `ok:true` only after stable hover telemetry; decline, expiry, SDK failure or interruption is `ok:false`. STOP cancels the prompt and requests cancellation of any active takeoff. Duplicate IDs cannot launch twice. The server waits at most 65 seconds. No remote enable-flight action exists.
+
+Agent HTTP routes require `Authorization: Bearer <GA_AGENT_TOKEN>`: GET `/agent/status`, POST `/agent/mission`, POST `/agent/observation`, POST `/agent/action`, POST `/agent/actions/{UUID}/wait`, POST `/agent/memory`, GET `/agent/memory/{UUID}`, POST `/agent/release` and POST `/agent/stop`. `/docs` exposes exact request schemas. `mission` returns a private lease; subsequent owning requests carry `mission_id` and `lease`. An action also carries an `action_id` and `observation_id`. Responses to accepted actions are initially `pending`; poll/wait for `completed`, `failed` or `cancelled`. HTTP 202 alone is not physical completion.
+
+`/agent/release` can clean up only its matching mission; `/agent/stop` is the explicit authenticated operator/agent stop-all endpoint. Old leases cannot regain control after disconnect, reset, expiry or restart. Existing dashboard reset/abort can release agent control. See [OpenClaw integration](OPENCLAW_INTEGRATION.md) for limits, Watch routing, memory and deployment.

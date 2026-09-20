@@ -1,5 +1,7 @@
 # Choose ChatGPT, Claude, or API billing
 
+**OpenClaw option:** [the dedicated mission integration](OPENCLAW_INTEGRATION.md) uses the model and authentication configured for the Guardian Angel agent in OpenClaw. The dashboard selector below still controls the built-in planner only. The new `GA_AGENT_TOKEN` is a private server credential, not a model API key.
+
 The command center supports four AI providers. Choose one in the dashboard's **AI provider** panel while idle, then click **Apply**. That choice controls both incident planning and camera-based search decisions. The iPhone remains the DJI bridge; these changes run on the Windows laptop or Mac hosting the Python server.
 
 | Dashboard option | `AI_PROVIDER` | Authentication on the server computer | Usage |

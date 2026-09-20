@@ -1,0 +1,86 @@
+{
+  "id": "guardian-angel",
+  "name": "Guardian Angel",
+  "version": "0.1.0",
+  "description": "Supervised drone observation and bounded action tools",
+  "contracts": {
+    "tools": [
+      "guardian_status",
+      "guardian_begin",
+      "guardian_observe",
+      "guardian_request_takeoff",
+      "guardian_navigate",
+      "guardian_move",
+      "guardian_yaw",
+      "guardian_gimbal",
+      "guardian_hold",
+      "guardian_return_home",
+      "guardian_report_candidate",
+      "guardian_remember",
+      "guardian_memory",
+      "guardian_stop"
+    ]
+  },
+  "toolMetadata": {
+    "guardian_status": {
+      "optional": true
+    },
+    "guardian_begin": {
+      "optional": true
+    },
+    "guardian_observe": {
+      "optional": true
+    },
+    "guardian_request_takeoff": {
+      "optional": true
+    },
+    "guardian_navigate": {
+      "optional": true
+    },
+    "guardian_move": {
+      "optional": true
+    },
+    "guardian_yaw": {
+      "optional": true
+    },
+    "guardian_gimbal": {
+      "optional": true
+    },
+    "guardian_hold": {
+      "optional": true
+    },
+    "guardian_return_home": {
+      "optional": true
+    },
+    "guardian_report_candidate": {
+      "optional": true
+    },
+    "guardian_remember": {
+      "optional": true
+    },
+    "guardian_memory": {
+      "optional": true
+    },
+    "guardian_stop": {
+      "optional": true
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "serverUrl": {
+        "type": "string",
+        "default": "http://127.0.0.1:8000"
+      },
+      "tokenEnv": {
+        "type": "string",
+        "default": "GA_AGENT_TOKEN"
+      },
+      "agentId": {
+        "type": "string",
+        "default": "guardian-angel"
+      }
+    }
+  }
+}

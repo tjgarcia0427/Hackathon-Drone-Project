@@ -54,6 +54,10 @@
   <span style="margin-left:auto"><span id="dronedot" class="dot"></span><span id="dronetxt">no drone</span></span>
 </header>
 <main>
+  <section id="agent-panel" class="panel" hidden style="grid-column:1/-1">
+    <h2>Guardian Angel agent</h2><p id="agent-summary"></p>
+    <p>OpenClaw owns reasoning and model selection. Start its mission in the Guardian Angel agent conversation. Reset releases agent control; the pilot can use STOP on the phone.</p>
+  </section>
   <div class="aircraft-overview" aria-labelledby="aircraft-title">
     <h2 id="aircraft-title">Aircraft stats <span id="telemetry-badge" class="telemetry-badge">Waiting for aircraft</span></h2>
     <dl id="aircraft-stats" class="aircraft-stats"></dl>
@@ -124,6 +128,8 @@ function receiveTelemetry(message) { telemetryDisplay.update(message,performance
 setInterval(renderTelemetry,200);
 const kv = (el, obj) => { el.innerHTML = obj ? Object.entries(obj).map(([k,v]) => `<span>${escapeHTML(k)}</span><span>${escapeHTML(v==null?'—':typeof v==='number'? +v.toFixed(6) : v)}</span>`).join('') : '<span>—</span><span></span>'; };
 function render(s) {
+  $('agent-panel').hidden = !s.agent && s.mission_driver!=='openclaw';
+  $('agent-summary').textContent = s.agent ? `${s.agent.status} · ${s.agent.mode} · ${s.agent.steps_used}/${s.agent.max_steps} actions · ${s.agent.objective}` : 'OpenClaw driver selected. Waiting for an agent mission.';
   renderAI(s);
   renderWatchAlerts(s.watch_alerts || []);
   $('phase').textContent = s.phase; $('phase').className = 'phase ' + s.phase;
@@ -278,7 +284,7 @@ function renderAI(s) {
     $('ai-provider').replaceChildren(...aiOptions.map(o=>{ const option=document.createElement('option'); option.value=o.provider; option.textContent=o.label; return option; }));
     $('ai-provider').value=s.ai.provider; $('ai-model').value=s.ai.model; $('ai-model').placeholder=s.ai.provider.endsWith('_api')?'Enter API model ID':'CLI default (optional)'; activeAI=key;
   }
-  const locked=s.phase!=='idle' || s.planning;
+  const locked=s.phase!=='idle' || s.planning || s.agent?.status==='active';
   for(const id of ['ai-provider','ai-model','ai-apply']) $(id).disabled=locked;
   $('ai-status').textContent=s.ai.label+' · '+s.ai.effective_model+(s.ai.setup_error ? ' · '+s.ai.setup_error : ' · Configuration detected; live login/model check still required')+(locked?' · Reset and finish planning to change':'');
 }

@@ -1,8 +1,7 @@
 # Pilot takeoff inside Guardian Angel
 
 The iPhone now has **Take off (pilot)**. It calls DJI Mobile SDK's standard
-`startTakeoffWithCompletion:` only after a local confirmation. Neither the AI,
-Watch nor server command protocol can initiate takeoff. No firmware change is involved.
+`startTakeoffWithCompletion:` only after a local confirmation. The OpenClaw tool can request a pilot confirmation on the phone; only the pilot's approval initiates launch. A Watch alert alone cannot launch. No firmware change is involved.
 
 ## First hardware test
 
@@ -67,8 +66,8 @@ flight. Continue to restart the server when changing launch sites/mock-live mode
 `PilotTakeoff.h` contains the gate and request state machine, separate from the
 anchor/server/AI state. `DroneBridge.m` supplies fresh DJI observations, calls the
 SDK and checks callback identities. Both iPhone UIs expose the same local action.
-The video decoding implementation, navigation limits and server protocol remain
-unchanged. The preservation check permits only the explicit pilot-takeoff additions
+The video decoding implementation and navigation limits remain unchanged.
+The optional OpenClaw extension adds `request_takeoff` and read-only control status; it does not add remote flight arming. The preservation check permits only the explicit pilot-takeoff additions
 alongside the previously reviewed telemetry updates.
 
 Run on macOS:
@@ -101,3 +100,7 @@ DJI reference: [takeoff and cancellation API](https://developer.dji.com/api-refe
   explicitly allowed pilot-takeoff additions remains unchanged.
 - No command was sent to a real aircraft during implementation. Signed installation
   and the first outdoor takeoff/hover/state-continuity check remain with the pilot.
+
+## OpenClaw request flow
+
+An agent takeoff request opens a separate **Agent requests takeoff** confirmation on the iPhone. Decline or wait 20 seconds to reject it. Confirming runs the same checks and launch path above, retains the current bridge/server/anchor, and leaves AI disabled. STOP, disconnect or app inactivity cancels the request; stale approval callbacks cannot launch. The phone acknowledges success only after the stable hover check. See [OpenClaw integration and setup](OPENCLAW_INTEGRATION.md).
