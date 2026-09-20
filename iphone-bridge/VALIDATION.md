@@ -15,7 +15,16 @@ Prepared on Windows, September 19, 2026, for the Mavic Air 2 / iPhone bridge.
 
 Python transport tests used Python 3.12, FastAPI 0.141.1, Starlette 1.6.0, and HTTPX 0.28.1. The test client emitted a deprecation warning for HTTPX; all thirteen tests completed successfully. No AI service calls or physical flight commands were sent in these tests.
 
-The coordinated repository update additionally passed six `server/test_safety.py` cases for the 35 m server fence, full search-area bounds, 5 m moves, altitude/angle limits, battery/step limits and invalid numeric inputs. These exercise the actual safety functions with numeric test objects; they do not validate the Anthropic API or Pydantic schema. The uploaded `server/app.py` syntax tree matches the migration exercised by the package tests. Total Python tests across the package and coordinated server update: **19 passed**.
+The coordinated repository update additionally passed six `server/test_safety.py` cases for the 35 m server fence, full search-area bounds, 5 m moves, altitude/angle limits, battery/step limits and invalid numeric inputs. These exercise the actual safety functions with numeric test objects; they do not validate the Anthropic API or Pydantic schema. At the original iPhone integration milestone, `server/app.py` matched the migration exercised by the package tests, with **19 Python tests passed** across the package and coordinated update. The subsequent AI-provider changes below extend the current server beyond that migration snapshot.
+
+## AI provider update — September 19, 2026
+
+- **23 current server tests passed**: six navigation/safety tests, twelve AI adapter tests and five configuration/lifecycle tests. API tests use the actual OpenAI 2.54.0 and Anthropic 0.125.0 Python SDKs with mocked HTTP; they do not establish live API access. CLI fixtures launch real subprocesses to test image/schema handling, login checks, timeout cleanup and Windows executable resolution.
+- A real Codex CLI signed in with ChatGPT identified a synthetic red-circle image in **5.67 s**. The dashboard applied the provider and produced a valid incident plan. No aircraft was connected.
+- The CLI's default model timed out on the full search prompt/schema at 8 s; the late decision was rejected. Selecting `gpt-5.6-luna` passed the full search check in **7.05 s** with a valid yaw decision and no person detected. This single synthetic check has a small timing margin and does not prove field performance.
+- Provider changes are blocked during active work. Tests verify reset invalidates a pending plan and search timeout requests stop without applying a late movement decision.
+- Claude subscription and both API options still require live checks with the team's accounts. No iPhone source changes were needed for provider selection.
+- Updated setup is in `docs/AI_PROVIDERS.md` in the repository and `AI_PROVIDERS.md` in the refreshed standalone iPhone package. Use current repository `server/` files for these features; the old scaffold migration is not a provider installer.
 
 ## Additional review fixes
 
@@ -37,3 +46,4 @@ The coordinated repository update additionally passed six `server/test_safety.py
 - End-to-end operation with your real planner, Watch/Shortcut trigger, and fall/person-detection scenario.
 
 The mock mode shares navigation math with the real bridge but does not simulate GPS noise, aircraft inertia, terrain, obstacles, radio delay, or DJI failsafes. Its results do not validate physical flight performance. No `.ipa` or signed binary is included because the Apple build/signing steps require a Mac.
+

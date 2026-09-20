@@ -10,7 +10,7 @@ Hackathon prototype for Claude Code Build Day, Miami, September 20, 2026. A Watc
 
 ```mermaid
 flowchart LR
-    W[Watch or phone Shortcut] -->|Incident GPS over HTTP| S[Python server and Claude planner]
+    W[Watch or phone Shortcut] -->|Incident GPS over HTTP| S[Python server and selected AI]
     D[Operator dashboard] -->|Review and dispatch| S
     S <-->|Commands and telemetry over WebSocket| I[iPhone bridge app]
     I -->|JPEG camera frames over HTTP| S
@@ -25,6 +25,7 @@ The Watch trigger is a Shortcut/demo incident input. We have not built a Watch a
 ## Start here
 
 - **Mac/iPhone setup and staged tests:** [iphone-bridge/README.md](iphone-bridge/README.md).
+- **ChatGPT / Claude subscription or API setup:** [docs/AI_PROVIDERS.md](docs/AI_PROVIDERS.md).
 - **Teammate agent context and next tasks:** [docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md).
 - **Wire protocol and command semantics:** [docs/PROTOCOL.md](docs/PROTOCOL.md).
 - **Review and validation evidence:** [review](iphone-bridge/REVIEW.md), [validation](iphone-bridge/VALIDATION.md).
@@ -36,7 +37,7 @@ The Watch trigger is a Shortcut/demo incident input. We have not built a Watch a
 | Teammate's Mac | Xcode, CocoaPods, DJI iOS app key, signing, installation and device logs |
 | iPhone with the pilot | Bridge app, USB connection to RC-N1, camera preview, local arm and STOP AI |
 | RC-N1 + Mavic Air 2 | Aircraft connection, manual takeoff, pilot takeover and DJI RTH |
-| Windows laptop or Mac server | Python server, detector, Claude API calls and operator dashboard |
+| Windows laptop or Mac server | Python server, detector, selected AI provider and operator dashboard |
 | Watch / incident phone | Shortcut sends incident location to the server |
 | Lorenzo / server side | Planner, detector, dashboard and incident flow |
 | TJ / iPhone side | Native bridge and coordinated protocol/integration changes |
@@ -54,8 +55,10 @@ cd server
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-$env:ANTHROPIC_API_KEY = 'your-key'
-$env:CLAUDE_MODEL = 'your-available-model-id'
+# First install the official Codex CLI and run codex login with ChatGPT.
+$env:AI_PROVIDER = 'codex'
+$env:AI_MODEL = 'gpt-5.6-luna'
+python ai_smoke_test.py --search-check
 $env:AUTO_DISPATCH = '0'
 python -m uvicorn app:app --host 0.0.0.0 --port 8000
 ```
@@ -67,13 +70,15 @@ cd server
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-export ANTHROPIC_API_KEY='your-key'
-export CLAUDE_MODEL='your-available-model-id'
+# First install the official Codex CLI and run codex login with ChatGPT.
+export AI_PROVIDER=codex
+export AI_MODEL=gpt-5.6-luna
+python ai_smoke_test.py --search-check
 export AUTO_DISPATCH=0
 python -m uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
-Use an actual model ID available to your Anthropic account and compatible with the planner's structured-output call. The scaffold's default model name has not been validated. Keep API keys out of Git. Open the dashboard at `http://localhost:8000`; on the iPhone enter `http://YOUR-LAPTOP-IP:8000`.
+The dashboard offers **ChatGPT subscription (Codex CLI), Claude subscription (Claude Code CLI), OpenAI API and Anthropic API**. Sign in on the server computer for subscription use; keys are needed only for API mode. Choose a provider/model while idle and click Apply; reset before switching. The setting lasts until server restart. See [AI setup and test instructions](docs/AI_PROVIDERS.md) for each option, model selection and troubleshooting. There is no automatic fallback to API billing. Keep API keys out of Git. Open the dashboard at `http://localhost:8000`; on the iPhone enter `http://YOUR-LAPTOP-IP:8000`.
 
 Current `server/app.py` already includes the iPhone integration: command expiry, fresh-frame/telemetry checks, disconnect cancellation, reset/stop behavior, and RTH completion timeout. **Do not reapply `iphone-bridge/server-support/patch_server.py` to current main.** It is retained as a reviewed migration for the original scaffold only.
 
@@ -81,8 +86,11 @@ Use a private LAN/hotspot or an authenticated private VPN. The command center ha
 
 ## Local tests and demo sequence
 
+Run `python -m unittest discover -s . -p "test_*.py" -v` from `server/` for provider, mission lifecycle and navigation checks. The ChatGPT subscription path has passed a real synthetic-image test and dashboard incident planning; Claude subscription and both API paths need live checks with your accounts. All **23 server tests passed**. Visual search decisions have an 8-second deadline, inside the existing 10-second frame-age check. The CLI default model timed out on the full search check; `gpt-5.6-luna` passed in 7.05 seconds on this laptop. Repeat `--search-check` with your chosen model/network before a mission.
+
+
 1. **Server-only simulation:** run `python sim_drone.py` from `server/` in another terminal. Use the dashboard's development incident and dispatch controls. This checks the existing server workflow without DJI hardware; it does not validate the iPhone.
-2. **iPhone mock mode:** build/install the app, then follow the mock-only smoke server instructions in the bridge README. This separate server has no Claude costs. Check camera uploads, command acknowledgments, movement math, STOP and reconnect. It rejects live hardware.
+2. **iPhone mock mode:** build/install the app, then follow the mock-only smoke server instructions in the bridge README. This separate server makes no AI calls. Check camera uploads, command acknowledgments, movement math, STOP and reconnect. It rejects live hardware.
 3. **Bench connection:** stop the simulator/smoke server, start the project server, remove propellers, and verify DJI registration, telemetry, decoded camera preview and camera-only gimbal control.
 4. **Supervised flight:** record a valid ground GPS anchor in the bridge, take off manually with the RC, position within the demo envelope, enable flight locally, and verify short commands and physical takeover before dispatching an incident mission.
 
@@ -122,8 +130,10 @@ iphone-bridge/ios/              Native app, Xcode project, CocoaPods and Mac set
 iphone-bridge/tools/            Mock-only transport server
 iphone-bridge/tests/            Navigation, server-integration and transport checks
 iphone-bridge/server-support/   Migration patch for the original scaffold
+docs/AI_PROVIDERS.md           Four AI provider options, login, models and inference tests
 docs/PROTOCOL.md                Current iPhone/server contract
 docs/AGENT_HANDOFF.md           Teammate context and remaining device validation
 ```
 
 Work directly on `main` as requested by the team; this project is not using pull requests. Coordinate edits before replacing files another teammate is changing.
+

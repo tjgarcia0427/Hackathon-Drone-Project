@@ -88,9 +88,11 @@ These are application checks, not obstacle avoidance or a guaranteed watchdog af
 
 The iPhone decodes DJI video through DJIWidget, snapshots a rendered frame, downsizes and uploads JPEG. Snapshot callbacks time out and are tied to the original server connection to avoid late uploads after reconnection.
 
-The integrated server accepts nonempty frames up to 2 MB only while a drone WebSocket is connected. It waits for a fresh frame after each action before asking the planner; telemetry must be under 3 s old. A planner decision based on a frame older than 10 s is rejected. Reset/reconnection invalidates in-flight detector results from the previous session.
+The integrated server accepts nonempty frames up to 2 MB only while a drone WebSocket is connected. It waits for a fresh frame after each action before asking the planner; telemetry must be under 3 s old. Search inference has an 8-second deadline. A planner decision based on a frame older than 10 s is rejected. A timeout fails the mission and requests app-control release. Reset/reconnection invalidates in-flight detector results from the previous session.
 
-- `POST /incident`: accepts `latitude`, `longitude`, `accuracy`, optional `timestamp`, and `source`; generates a plan for operator review. It is a trigger endpoint, not an Apple fall-detection integration.
+- `GET /ai`: selected provider/model, provider options and local setup status; no credentials.
+- `POST /ai/config`: JSON `{ "provider":"codex", "model":"" }`; providers are `codex`, `claude_code`, `openai_api`, `anthropic_api`. Only allowed while idle, with no in-flight planning/search/commands. Invalid setup returns 400, busy state 409, unknown fields 422. Selection is in memory until restart. See [AI_PROVIDERS.md](AI_PROVIDERS.md).
+- `POST /incident`: accepts `latitude`, `longitude`, `accuracy`, optional `timestamp`, and `source`; generates a plan for operator review with a 60-second deadline. Concurrent planning is rejected; reset/abort invalidates late results. It is a trigger endpoint, not an Apple fall-detection integration.
 - `POST /dispatch`: starts an approved plan after connected/fresh telemetry and bounds checks. Keep `AUTO_DISPATCH=0`.
 - `POST /reset`: awaits cancellation, requests stop, clears mission/frame state. It does not land the drone or cancel DJI RTH.
 - `POST /abort`: awaits mission cancellation, requests RTH, waits for landing acknowledgment and returns `ok:false` if that fails. A disarmed phone rejects RTH; use the RC.
@@ -104,3 +106,4 @@ The server's current `found.lat`/`found.lng` are the **aircraft coordinates**, n
 `server/sim_drone.py` is the original server-only simulator and does not implement every iPhone interlock or RTH completion behavior. Use it to exercise the dashboard/planner, not to certify this protocol on hardware.
 
 For the iPhone wire contract, use the app's mock mode with `iphone-bridge/tools/smoke_server.py`; follow [the bridge test instructions](../iphone-bridge/README.md). Its `/command` endpoint sends commands and returns their acknowledgments, `/state` shows telemetry/JPEG byte count, and `/frame.jpg` shows a labelled mock image. This smoke server has no incident/planner flow and rejects live aircraft connections.
+

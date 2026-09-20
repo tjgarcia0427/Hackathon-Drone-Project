@@ -1,5 +1,5 @@
 """Local person detector (YOLOv8n). Optional - if ultralytics isn't installed,
-detect() returns None and Claude does the looking on its own."""
+detect() returns None and the selected visual AI examines the image."""
 from __future__ import annotations
 
 import io
@@ -30,3 +30,4 @@ def detect(frame_jpeg: bytes) -> dict | None:
         "confidence": float(best.conf[0]),
         "bbox": [round(float(v)) for v in best.xyxy[0].tolist()],
     }
+

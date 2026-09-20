@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rescue Command Center</title>
 <style>
   :root { --bg:#0b0f14; --panel:#131a22; --line:#22303d; --txt:#e6edf3; --dim:#8b98a5; --ok:#2ecc71; --warn:#f39c12; --bad:#e74c3c; --acc:#4ea1ff; }
@@ -27,6 +28,12 @@
   .found-banner { display:none; background:var(--ok); color:#000; padding:14px; border-radius:10px; font-weight:800; font-size:18px; margin-bottom:12px; }
   .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--bad); margin-right:6px; }
   .dot.on { background:var(--ok); }
+  select, input { max-width:100%; background:var(--bg); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:8px; }
+  .ai-form { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .ai-field { display:flex; align-items:center; gap:8px; max-width:100%; }
+  button:disabled, select:disabled, input:disabled { opacity:.5; cursor:not-allowed; }
+  #ai-status { margin:8px 0 0; color:var(--dim); }
+  @media(max-width:760px) { main { grid-template-columns:1fr; } header { flex-wrap:wrap; } }
 </style>
 </head>
 <body>
@@ -52,12 +59,24 @@
     </div>
   </section>
   <section>
+    <div class="panel" style="margin-bottom:16px">
+      <h2>AI provider</h2>
+      <div class="ai-form">
+        <div class="ai-field"><label for="ai-provider">Use</label>
+        <select id="ai-provider" onchange="providerChanged()"></select>
+        </div><div class="ai-field"><label for="ai-model">Model</label>
+        <input id="ai-model" placeholder="Provider default" maxlength="120"></div>
+        <button id="ai-apply" class="btn" onclick="applyAI()">Apply</button>
+      </div>
+      <p id="ai-status" role="status">Loading AI configuration…</p>
+      <p style="color:var(--dim)">Sign in to Codex or Claude Code on the server computer. API keys stay in the server environment. Reset before switching providers.</p>
+    </div>
     <div class="panel">
       <h2>Incident</h2>
       <div id="incident" class="kv"><span>—</span><span></span></div>
     </div>
     <div class="panel" style="margin-top:16px">
-      <h2>Mission plan (Claude → safety layer)</h2>
+      <h2>Mission plan (AI → safety layer)</h2>
       <div id="plan" class="kv"><span>—</span><span></span></div>
     </div>
     <div class="panel" style="margin-top:16px">
@@ -72,8 +91,10 @@
 </main>
 <script>
 const $ = id => document.getElementById(id);
-const kv = (el, obj) => { el.innerHTML = obj ? Object.entries(obj).map(([k,v]) => `<span>${k}</span><span>${typeof v==='number'? +v.toFixed(6) : v}</span>`).join('') : '<span>—</span><span></span>'; };
+const escapeHTML = v => String(v ?? "").replace(/[&<>"\']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","\'":"&#39;"}[c]));
+const kv = (el, obj) => { el.innerHTML = obj ? Object.entries(obj).map(([k,v]) => `<span>${escapeHTML(k)}</span><span>${escapeHTML(typeof v==='number'? +v.toFixed(6) : v)}</span>`).join('') : '<span>—</span><span></span>'; };
 function render(s) {
+  renderAI(s);
   $('phase').textContent = s.phase; $('phase').className = 'phase ' + s.phase;
   $('dronedot').className = 'dot' + (s.drone_connected ? ' on' : '');
   $('dronetxt').textContent = s.drone_connected ? (s.drone?.drone_id || 'drone') + ' connected' : 'no drone';
@@ -86,7 +107,7 @@ function render(s) {
     $('foundBanner').textContent = `SUBJECT LOCATED — ${s.found.distance_from_report_m} m from reported fall · confidence ${(s.found.confidence*100).toFixed(0)}% · drone holding`; }
   else $('foundBanner').style.display='none';
 }
-const fmtLog = e => `<div>${new Date(e.t*1000).toLocaleTimeString()}  ${e.msg}</div>`;
+const fmtLog = e => `<div>${new Date(e.t*1000).toLocaleTimeString()}  ${escapeHTML(e.msg)}</div>`;
 function connect() {
   const ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/dashboard');
   ws.onmessage = ev => {
@@ -95,11 +116,35 @@ function connect() {
     else if (m.type==='log') { $('log').insertAdjacentHTML('beforeend', fmtLog(m.entry)); $('log').scrollTop=1e9; }
     else if (m.type==='telemetry') kv($('drone'), m.drone);
     else if (m.type==='frame') { $('cam').src = '/frame.jpg?t=' + Date.now();
-      $('det').textContent = 'detector: ' + (m.detection ? (m.detection.person ? `PERSON ${(m.detection.confidence*100).toFixed(0)}% ${JSON.stringify(m.detection.bbox)}` : 'no person') : 'not installed (Claude-only)'); }
+      $('det').textContent = 'detector: ' + (m.detection ? (m.detection.person ? `PERSON ${(m.detection.confidence*100).toFixed(0)}% ${JSON.stringify(m.detection.bbox)}` : 'no person') : 'not installed (visual AI only)'); }
   };
   ws.onclose = () => setTimeout(connect, 1500);
 }
-async function post(path, body) { const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body: body?JSON.stringify(body):undefined}); if(!r.ok) alert(await r.text()); }
+async function post(path, body) {
+  const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:body?JSON.stringify(body):undefined});
+  const data = await r.json();
+  if(!r.ok || data.ok===false) { alert(data.detail || data.error || 'Request failed'); return null; }
+  return data;
+}
+let aiOptions=[], activeAI='';
+function renderAI(s) {
+  if(!s.ai) return;
+  aiOptions=s.ai.options || [];
+  const key=JSON.stringify([s.ai.provider,s.ai.model]);
+  if(key!==activeAI) {
+    $('ai-provider').replaceChildren(...aiOptions.map(o=>{ const option=document.createElement('option'); option.value=o.provider; option.textContent=o.label; return option; }));
+    $('ai-provider').value=s.ai.provider; $('ai-model').value=s.ai.model; activeAI=key;
+  }
+  const locked=s.phase!=='idle' || s.planning;
+  for(const id of ['ai-provider','ai-model','ai-apply']) $(id).disabled=locked;
+  $('ai-status').textContent=s.ai.label+' · '+s.ai.effective_model+(s.ai.setup_error ? ' · '+s.ai.setup_error : ' · Configuration detected; live login/model check still required')+(locked?' · Reset and finish planning to change':'');
+}
+function providerChanged() { $('ai-model').value=''; const option=aiOptions.find(o=>o.provider===$('ai-provider').value); $('ai-model').placeholder=option?.default_model || ($('ai-provider').value.endsWith('_api')?'Enter your API model ID':'CLI default'); }
+async function applyAI() {
+  $('ai-apply').disabled=true;
+  try { await post('/ai/config',{provider:$('ai-provider').value,model:$('ai-model').value.trim()}); }
+  finally { activeAI=''; render(await (await fetch('/state')).json()); }
+}
 async function simulateFall() {
   const s = await (await fetch('/state')).json();
   const d = s.drone || {latitude:25.7617, longitude:-80.1918};
@@ -109,3 +154,4 @@ connect();
 </script>
 </body>
 </html>
+

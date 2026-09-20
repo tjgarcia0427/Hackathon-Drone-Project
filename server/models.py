@@ -28,7 +28,7 @@ class DroneState(BaseModel):
 
 
 class MissionPlan(BaseModel):
-    """Claude's proposed mission (validated by safety.py before use)."""
+    """The selected AI's proposed mission (validated by safety.py before use)."""
     target_lat: float
     target_lng: float
     search_radius_m: float = Field(ge=5, le=120)
@@ -39,7 +39,7 @@ class MissionPlan(BaseModel):
 
 
 class SearchStep(BaseModel):
-    """One decision from Claude during the search loop."""
+    """One decision from the selected AI during the search loop."""
     action: Literal["yaw", "gimbal", "move", "found", "abort"]
     yaw_deg: Optional[float] = Field(None, description="relative yaw, -180..180")
     gimbal_pitch_deg: Optional[float] = Field(None, ge=-90, le=0)

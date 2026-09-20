@@ -47,6 +47,8 @@ This checks compilation/linking only. Installing and running still requires sign
 
 ## First test: mock hardware, no AI costs
 
+Mock hardware skips DJI registration, so this first test does **not** need a DJI app key. Xcode signing, a unique bundle ID, CocoaPods dependencies and a physical iPhone are still required. Add the matching DJI key before switching mock hardware off.
+
 On your Windows laptop or his Mac:
 
 ```bash
@@ -108,7 +110,7 @@ The integrated server changes add:
 
 Keep **AUTO_DISPATCH=0** for the demo. The repository planner guidance now requests altitude around 10 m, a 5–10 m demo search radius, and relative moves of at most 5 m. Server safety uses a 35 m radius; the target plus planned search radius must fit inside it. Keep the demo incident within about 20 m of launch. The search radius may not cover the incident's full GPS uncertainty; this limitation must remain visible to the operator. The app deliberately rejects plans outside its local limits; it does not silently change them. Stop `sim_drone.py` when the iPhone is connected. Restart the server when changing launch locations or switching between mock and real aircraft so its home reference is not reused.
 
-Run the existing server as its README describes, listening on the laptop's reachable interface. Use the same base URL in this app; it automatically uses `/ws/drone` and `/frame`.
+Choose ChatGPT subscription via Codex CLI, Claude subscription via Claude Code CLI, OpenAI API, or Anthropic API on the **server computer**. Follow [the AI setup guide](https://github.com/tjgarcia0427/Hackathon-Drone-Project/blob/main/docs/AI_PROVIDERS.md); the current repository is the source of truth if you received an older standalone iPhone zip. Login/keys and AI inference stay on the server; the iPhone does not need a ChatGPT/Claude login or app update for this selection. Run the existing server as its README describes, listening on the laptop's reachable interface. Use the same base URL in this app; it automatically uses `/ws/drone` and `/frame`.
 
 For remote teammates, use a private authenticated VPN or run the server beside the pilot and access that machine through your existing secure connection. **This repository's server has no authentication. Do not publish it through an open internet tunnel:** anyone who can reach it can submit incidents/commands and images. For a shared venue network, use your own private network. The development app permits local HTTP traffic; public deployment would require TLS and server-side authentication.
 
@@ -171,3 +173,4 @@ The three optional FastAPI transport tests require `python -m pip install -r too
 - `VALIDATION.md`: what was verified and what still needs hardware.
 
 API references: [DJI iOS SDK source/sample](https://github.com/dji-sdk/Mobile-SDK-iOS), [DJIWidget](https://github.com/dji-sdk/DJIWidget), [DJI flight controller API](https://developer.dji.com/api-reference/ios-api/Components/FlightController/DJIFlightController.html). Dependency licenses remain applicable; see `THIRD-PARTY-NOTICES.md`.
+

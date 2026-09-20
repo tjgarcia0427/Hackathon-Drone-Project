@@ -1,7 +1,7 @@
 """Rescue command center.
 
-Flow:  POST /incident  ->  Claude plans mission  ->  safety check  ->  POST /dispatch (or auto)
-       -> drone flies to target  ->  search loop (frame -> detector -> Claude -> safety -> command)
+Flow:  POST /incident  ->  selected AI plans mission  ->  safety check  ->  POST /dispatch (or auto)
+       -> drone flies to target  ->  search loop (frame -> detector -> AI -> safety -> command)
        -> SUBJECT LOCATED broadcast to dashboard.
 
 Run:   uvicorn app:app --host 0.0.0.0 --port 8000
@@ -20,10 +20,13 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+import ai_backends
 import detector
 import planner
 import safety
 from models import DroneState, FallEvent, MissionPlan, SearchStep
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
 
 AUTO_DISPATCH = os.environ.get("AUTO_DISPATCH", "0") == "1"
 ARRIVAL_RADIUS_M = 4.0
@@ -33,6 +36,8 @@ app = FastAPI(title="Rescue Command Center")
 
 class State:
     def __init__(self) -> None:
+        self.planning = False
+        self.plan_epoch = 0
         self.incident: FallEvent | None = None
         self.plan: MissionPlan | None = None
         self.plan_verdict: safety.Verdict | None = None
@@ -52,6 +57,8 @@ class State:
     def snapshot(self) -> dict:
         return {
             "phase": self.phase,
+            "planning": self.planning,
+            "ai": planner.status(),
             "incident": self.incident.model_dump() if self.incident else None,
             "plan": self.plan.model_dump() if self.plan else None,
             "plan_ok": self.plan_verdict.ok if self.plan_verdict else None,
@@ -153,19 +160,58 @@ async def send_cmd(action: str, timeout: float = 25.0, **params: Any) -> dict:
 
 # ---------- HTTP ----------
 
+class AIConfiguration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    provider: Literal["codex", "claude_code", "openai_api", "anthropic_api"]
+    model: str = Field("", max_length=120)
+
+
+@app.get("/ai")
+async def ai_status() -> dict:
+    return planner.status()
+
+
+@app.post("/ai/config")
+async def ai_config(config: AIConfiguration) -> dict:
+    if S.phase != "idle" or S.planning or (S.search_task and not S.search_task.done()) or S.pending_acks:
+        raise HTTPException(409, "Reset and wait for active planning/commands before changing AI provider")
+    try:
+        result = planner.configure(config.provider, config.model)
+    except ai_backends.AIError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    log(f"AI selected: {result['label']} / {result['effective_model']}")
+    await push_state()
+    return result
+
+
 @app.post("/incident")
 async def incident(fall: FallEvent) -> dict:
     """Entry point for the phone/watch Shortcut."""
-    if S.search_task and not S.search_task.done():
-        raise HTTPException(409, "search already in progress")
+    if S.planning or (S.search_task and not S.search_task.done()):
+        raise HTTPException(409, "planning/search already in progress")
+    S.plan_epoch += 1
+    epoch = S.plan_epoch
+    S.planning = True
+    S.plan = S.plan_verdict = None
     S.incident, S.found, S.history = fall, None, []
     S.phase = "planned"
     log(f"FALL DETECTED at {fall.latitude:.6f},{fall.longitude:.6f} ±{fall.accuracy}m")
+    await push_state()
     try:
-        S.plan = await asyncio.to_thread(planner.plan_mission, fall)
+        proposed = await asyncio.wait_for(asyncio.to_thread(planner.plan_mission, fall), planner.plan_timeout())
     except Exception as e:  # noqa: BLE001
+        if isinstance(e, TimeoutError):
+            e = ai_backends.AIError("AI mission planning exceeded the 60-second deadline")
         log(f"planner failed: {e}")
+        S.planning = False
+        await push_state()
         raise HTTPException(502, f"planner failed: {e}") from e
+    finally:
+        S.planning = False
+    if epoch != S.plan_epoch:
+        await push_state()
+        raise HTTPException(409, "Incident planning was cancelled or reset")
+    S.plan = proposed
     home = S.home or (fall.latitude, fall.longitude)
     S.plan_verdict = safety.check_mission(S.plan, *home, S.drone)
     log(f"mission planned: r={S.plan.search_radius_m}m alt={S.plan.altitude_m}m {S.plan.pattern} "
@@ -197,6 +243,7 @@ async def dispatch() -> dict:
 
 @app.post("/abort")
 async def abort() -> dict:
+    S.plan_epoch += 1
     await iphone_cancel_mission()
     S.phase = "aborted"
     try:
@@ -245,6 +292,7 @@ async def state() -> dict:
 
 @app.post("/reset")
 async def reset() -> dict:
+    S.plan_epoch += 1
     S.frame_epoch = getattr(S, "frame_epoch", 0) + 1
     await iphone_cancel_mission()
     await iphone_stop("mission reset")
@@ -271,10 +319,10 @@ async def run_mission() -> None:
             frame_at = await iphone_fresh_frame(time.monotonic())
             if not iphone_telemetry_ready():
                 raise RuntimeError("lost telemetry")
-            step: SearchStep = await asyncio.to_thread(
+            step: SearchStep = await asyncio.wait_for(asyncio.to_thread(
                 planner.next_search_step, S.drone, S.latest_frame, S.latest_detection,
                 S.history, plan.target_lat, plan.target_lng,
-            )
+            ), planner.search_timeout())
             if not iphone_telemetry_ready() or time.monotonic() - frame_at > 10.0:
                 raise RuntimeError("planner result based on stale frame/telemetry")
             verdict = safety.check_step(step, S.drone, *home, step_no)
@@ -313,6 +361,8 @@ async def run_mission() -> None:
         raise
     except Exception as e:  # noqa: BLE001
         S.phase = "aborted"
+        if isinstance(e, TimeoutError):
+            e = ai_backends.AIError("AI search or command response exceeded its deadline")
         log(f"mission error: {e}")
         await iphone_stop("mission failed")
     finally:
@@ -387,3 +437,4 @@ async def index():
 
 
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
+
