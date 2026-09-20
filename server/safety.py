@@ -15,6 +15,8 @@ LIMITS = {
     "min_battery_pct": 30.0,
     "max_move_m": 5.0,
     "max_search_steps": 12,
+    "min_found_confidence": 0.8,     # matches the prompt; enforced here regardless of what the AI says
+    "min_candidate_margin": 0.15,    # chosen subject must beat every other person in frame by this much
 }
 
 
@@ -84,4 +86,31 @@ def check_step(step: SearchStep, drone: DroneState, home_lat: float, home_lng: f
         return Verdict(False, "yaw must be -180..180 degrees")
     if step.action == "gimbal" and (step.gimbal_pitch_deg is None or not math.isfinite(step.gimbal_pitch_deg) or not -90 <= step.gimbal_pitch_deg <= 0):
         return Verdict(False, "gimbal pitch must be -90..0 degrees")
+    if step.action == "found":
+        return check_found(step)
+    return Verdict(True)
+
+
+def check_found(step: SearchStep) -> Verdict:
+    """A 'found' must name one clearly-preferred candidate. Ambiguity keeps the search going."""
+    candidates = list(getattr(step, "candidates", None) or [])
+    chosen = getattr(step, "chosen_index", None)
+    if not math.isfinite(step.confidence) or step.confidence < LIMITS["min_found_confidence"]:
+        return Verdict(False, f"found confidence below {LIMITS['min_found_confidence']:.2f}")
+    if not candidates:
+        return Verdict(False, "found without any listed candidate")
+    if chosen is None or not 0 <= chosen < len(candidates):
+        return Verdict(False, "found without a valid chosen_index")
+    for c in candidates:
+        bbox = list(getattr(c, "bbox", None) or [])
+        if len(bbox) != 4 or not all(isinstance(v, int) and not isinstance(v, bool) for v in bbox):
+            return Verdict(False, "candidate bbox must be four integers")
+        if not math.isfinite(c.subject_confidence):
+            return Verdict(False, "candidate confidence invalid")
+    pick = candidates[chosen]
+    if pick.posture not in ("prone", "sitting"):
+        return Verdict(False, f"chosen candidate is {pick.posture}, not down")
+    others = [c.subject_confidence for i, c in enumerate(candidates) if i != chosen]
+    if others and pick.subject_confidence - max(others) < LIMITS["min_candidate_margin"]:
+        return Verdict(False, f"ambiguous: another candidate within {LIMITS['min_candidate_margin']:.2f}")
     return Verdict(True)

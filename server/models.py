@@ -38,6 +38,15 @@ class MissionPlan(BaseModel):
     rationale: str
 
 
+class PersonCandidate(BaseModel):
+    """One person the AI can see in the current frame. Every visible person is listed, not just the pick."""
+    bbox: list[int] = Field(description="pixel box [x1, y1, x2, y2] in the supplied frame; exactly 4 integers")
+    posture: Literal["prone", "sitting", "upright", "unknown"]
+    is_moving: bool = Field(description="appears to be walking/moving compared with earlier frames; false if unknown")
+    subject_confidence: float = Field(ge=0, le=1, description="how likely THIS person is the reported subject")
+    reason: str = Field(description="one short sentence: why this person is or is not the subject")
+
+
 class SearchStep(BaseModel):
     """One decision from the selected AI during the search loop."""
     action: Literal["yaw", "gimbal", "move", "found", "abort"]
@@ -47,3 +56,6 @@ class SearchStep(BaseModel):
     move_distance_m: Optional[float] = Field(None, ge=0)
     confidence: float = Field(0.0, ge=0, le=1)
     observation: str
+    # Subject disambiguation: list every person in frame, then pick one (or nobody).
+    candidates: list[PersonCandidate] = Field(default_factory=list)
+    chosen_index: Optional[int] = Field(None, ge=0, description="index into candidates of the chosen subject; null if none")

@@ -19,7 +19,13 @@
   .panel h2 { margin:0 0 10px; font-size:13px; color:var(--dim); text-transform:uppercase; letter-spacing:.6px; }
   .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-family:ui-monospace,Menlo,monospace; font-size:13px; }
   .kv span:first-child { color:var(--dim); }
-  img#cam { width:100%; border-radius:8px; background:#000; aspect-ratio:16/9; object-fit:cover; }
+  .camwrap { position:relative; }
+  img#cam { width:100%; border-radius:8px; background:#000; aspect-ratio:16/9; object-fit:cover; display:block; }
+  canvas#boxes { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  #people { margin-top:6px; font-family:ui-monospace,Menlo,monospace; font-size:12px; }
+  #people div { padding:2px 0; }
+  #people .pick { color:var(--ok); font-weight:700; }
+  #people .other { color:var(--dim); }
   #log { font-family:ui-monospace,Menlo,monospace; font-size:12px; max-height:340px; overflow:auto; white-space:pre-wrap; }
   #log div { padding:2px 0; border-bottom:1px dashed var(--line); }
   .btn { background:var(--acc); color:#000; border:0; border-radius:8px; padding:10px 16px; font-weight:700; cursor:pointer; margin-right:8px; }
@@ -56,9 +62,10 @@
       <div id="watch-alerts" aria-live="polite">No Watch alerts received.</div>
     </div>
     <div class="panel">
-      <h2>Live camera</h2>
-      <img id="cam" src="" alt="waiting for frames">
+      <h2 id="camTitle">Live camera</h2>
+      <div class="camwrap"><img id="cam" src="" alt="waiting for frames"><canvas id="boxes"></canvas></div>
       <div id="det" style="margin-top:6px;color:var(--dim)">detector: —</div>
+      <div id="people"></div>
     </div>
     <div class="panel" style="margin-top:16px">
       <h2>Controls</h2>
@@ -114,10 +121,46 @@ function render(s) {
   kv($('drone'), s.drone);
   $('log').innerHTML = (s.log || []).map(fmtLog).join('');
   $('log').scrollTop = 1e9;
-  if (s.found) { $('foundBanner').style.display='block';
-    $('foundBanner').textContent = `SUBJECT LOCATED — ${s.found.distance_from_report_m} m from reported fall · confidence ${(s.found.confidence*100).toFixed(0)}% · drone holding`; }
+  if (s.found) { $('foundBanner').style.display='block'; $('foundBanner').textContent = foundText(s.found); }
   else $('foundBanner').style.display='none';
+  if (s.last_step) { renderStep(s.last_step); if (s.found && !evidence) showEvidence(); } else clearBoxes();
 }
+function foundText(f) {
+  const subj = f.subject;
+  const where = subj && subj.est_distance_from_report_m != null
+    ? `subject ${subj.posture}, ~${subj.est_distance_from_report_m} m from report`
+    : `aircraft ${f.distance_from_report_m} m from report`;
+  const n = f.people_in_frame != null ? `${f.people_in_frame} ${f.people_in_frame===1?'person':'people'} in frame — ` : '';
+  return `SUBJECT LOCATED — ${n}${where} · confidence ${(f.confidence*100).toFixed(0)}% · drone holding · operator review`;
+}
+let lastStep=null, evidence=false;
+// On a found, freeze the camera on the exact frame the AI judged so the boxes match what the operator sees.
+function showEvidence() { evidence=true; $('cam').src='/step.jpg?t='+Date.now(); $('cam').onload=drawBoxes; $('camTitle').textContent='Evidence frame (AI decision) — reset for live'; }
+function clearBoxes() { lastStep=null; if(evidence){ evidence=false; $('camTitle').textContent='Live camera'; } const c=$('boxes'); c.getContext('2d').clearRect(0,0,c.width,c.height); $('people').textContent=''; }
+function renderStep(st) {
+  lastStep=st; drawBoxes();
+  const cs=st.candidates||[]; const chosen=st.step?.chosen_index;
+  const head=`${cs.length} ${cs.length===1?'person':'people'} in frame`+(cs.length? (chosen!=null?` — subject: #${chosen+1}`:' — no subject chosen'):'')+(st.ok?'':` — REJECTED: ${st.reason}`);
+  const rows=cs.map(c=>{ const d=document.createElement('div'); d.className=c.chosen?'pick':'other';
+    const dist=c.est_distance_from_report_m!=null?` ~${c.est_distance_from_report_m} m from report`:'';
+    d.textContent=`#${c.index+1}${c.chosen?' ★':''} ${c.posture}${c.is_moving?', moving':', still'}${dist} · ${(c.subject_confidence*100).toFixed(0)}% — ${c.reason}`; return d; });
+  const h=document.createElement('div'); h.textContent=head; h.style.color=st.ok?'var(--txt)':'var(--bad)';
+  $('people').replaceChildren(h,...rows);
+}
+function drawBoxes() {
+  const c=$('boxes'), img=$('cam'); if(!lastStep||!lastStep.frame) return;
+  const [fw,fh]=lastStep.frame; const W=img.clientWidth, H=img.clientHeight; if(!W||!H) return;
+  c.width=W; c.height=H; const ctx=c.getContext('2d'); ctx.clearRect(0,0,W,H);
+  // object-fit:cover — compute the drawn scale/offset so boxes land on the pixels they describe
+  const sc=Math.max(W/fw,H/fh), ox=(W-fw*sc)/2, oy=(H-fh*sc)/2;
+  for(const cd of lastStep.candidates||[]) {
+    const [x1,y1,x2,y2]=cd.bbox; const col=cd.chosen?'#2ecc71':'#f39c12';
+    ctx.lineWidth=cd.chosen?3:2; ctx.strokeStyle=col; ctx.strokeRect(ox+x1*sc,oy+y1*sc,(x2-x1)*sc,(y2-y1)*sc);
+    ctx.fillStyle=col; ctx.font='bold 12px ui-monospace,Menlo,monospace';
+    ctx.fillText(`#${cd.index+1} ${cd.posture} ${(cd.subject_confidence*100).toFixed(0)}%`, ox+x1*sc+3, Math.max(12,oy+y1*sc-4));
+  }
+}
+window.addEventListener('resize', drawBoxes);
 const fmtLog = e => `<div>${new Date(e.t*1000).toLocaleTimeString()}  ${escapeHTML(e.msg)}</div>`;
 function connect() {
   const ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/dashboard');
@@ -127,8 +170,9 @@ function connect() {
     else if (m.type==='watch_alert') receiveWatchAlert(m.alert);
     else if (m.type==='log') { $('log').insertAdjacentHTML('beforeend', fmtLog(m.entry)); $('log').scrollTop=1e9; }
     else if (m.type==='telemetry') kv($('drone'), m.drone);
-    else if (m.type==='frame') { $('cam').src = '/frame.jpg?t=' + Date.now();
-      $('det').textContent = 'detector: ' + (m.detection ? (m.detection.person ? `PERSON ${(m.detection.confidence*100).toFixed(0)}% ${JSON.stringify(m.detection.bbox)}` : 'no person') : 'not installed (visual AI only)'); }
+    else if (m.type==='step') { renderStep(m); if(m.step?.action==='found' && m.ok) showEvidence(); }
+    else if (m.type==='frame') { if(evidence) return; $('cam').src = '/frame.jpg?t=' + Date.now(); $('cam').onload=drawBoxes;
+      $('det').textContent = 'detector: ' + (m.detection ? (m.detection.person ? `${(m.detection.persons||[1]).length} PERSON(S), best ${(m.detection.confidence*100).toFixed(0)}% ${JSON.stringify(m.detection.bbox)}` : 'no person') : 'not installed (visual AI only)'); }
   };
   ws.onclose = () => setTimeout(connect, 1500);
 }

@@ -17,17 +17,23 @@ def available() -> bool:
 
 
 def detect(frame_jpeg: bytes) -> dict | None:
-    """Return {"person": bool, "confidence": float, "bbox": [x1,y1,x2,y2]} or None if unavailable."""
+    """Return {"person": bool, "confidence": float, "bbox": [x1,y1,x2,y2], "persons": [...]} or None if unavailable.
+
+    `person`/`confidence`/`bbox` describe the strongest detection (kept for the dashboard);
+    `persons` lists every detection so the visual AI can reason about multiple people.
+    """
     if _model is None:
         return None
     img = Image.open(io.BytesIO(frame_jpeg)).convert("RGB")
     res = _model.predict(img, classes=[0], conf=0.35, verbose=False)[0]  # class 0 = person
     if len(res.boxes) == 0:
-        return {"person": False, "confidence": 0.0, "bbox": None}
-    best = max(res.boxes, key=lambda b: float(b.conf[0]))
+        return {"person": False, "confidence": 0.0, "bbox": None, "persons": []}
+    persons = sorted(({"confidence": float(b.conf[0]), "bbox": [round(float(v)) for v in b.xyxy[0].tolist()]}
+                      for b in res.boxes), key=lambda p: -p["confidence"])
     return {
         "person": True,
-        "confidence": float(best.conf[0]),
-        "bbox": [round(float(v)) for v in best.xyxy[0].tolist()],
+        "confidence": persons[0]["confidence"],
+        "bbox": persons[0]["bbox"],
+        "persons": persons,
     }
 

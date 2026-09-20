@@ -2,11 +2,14 @@
 
 Lets you run the full loop (incident -> plan -> dispatch -> search -> found) with no aircraft.
 It renders synthetic camera frames: grass + a "fallen person" that only appears when the
-drone is within FOUND_RADIUS_M of the hidden subject AND roughly facing it.
+drone is within FOUND_RADIUS_M of the hidden subject AND roughly facing it. Optional upright
+"bystanders" wander the frame whenever the camera is pitched down, to exercise subject
+disambiguation (the AI must list every person and pick the prone one).
 
 Usage:
   python sim_drone.py --server http://localhost:8000 --home 25.7617,-80.1918 \
       --subject-offset 18,7      # subject is 18m north, 7m east of home
+      --bystanders 2             # draw 2 standing/walking people alongside the subject
 """
 from __future__ import annotations
 
@@ -29,8 +32,10 @@ FOV_DEG = 80.0
 
 
 class Sim:
-    def __init__(self, home: tuple[float, float], subject: tuple[float, float]) -> None:
+    def __init__(self, home: tuple[float, float], subject: tuple[float, float], bystanders: int = 0) -> None:
         self.lat, self.lng = home
+        self.bystanders = bystanders
+        self.tick = 0
         self.alt = 0.0
         self.heading = 0.0
         self.gimbal = 0.0
@@ -76,6 +81,16 @@ class Sim:
             d.rounded_rectangle((cx - 45, cy - 12, cx + 45, cy + 12), radius=8, fill=(40, 60, 160))
             d.ellipse((cx + 45, cy - 14, cx + 73, cy + 14), fill=(230, 190, 160))
             d.rectangle((cx - 100, cy - 8, cx - 45, cy + 8), fill=(30, 30, 30))
+        if self.bystanders and self.alt >= 3 and self.gimbal <= -30:
+            # upright people seen from above-and-ahead: small head over a tall body, drifting sideways each tick
+            self.tick += 1
+            for i in range(self.bystanders):
+                bx = (120 + i * 170 + self.tick * 6 * (1 if i % 2 == 0 else -1)) % 600 + 20
+                by = 90 + (i * 45) % 120
+                d.rounded_rectangle((bx - 10, by - 10, bx + 10, by + 40), radius=5, fill=(160, 40, 40) if i % 2 else (200, 200, 60))
+                d.ellipse((bx - 9, by - 30, bx + 9, by - 12), fill=(230, 190, 160))
+                d.rectangle((bx - 8, by + 40, bx - 2, by + 62), fill=(30, 30, 30))
+                d.rectangle((bx + 2, by + 40, bx + 8, by + 62), fill=(30, 30, 30))
         buf = io.BytesIO()
         img.save(buf, "JPEG", quality=80)
         return buf.getvalue()
@@ -113,12 +128,13 @@ async def main() -> None:
     ap.add_argument("--server", default="http://localhost:8000")
     ap.add_argument("--home", default="25.7617,-80.1918")
     ap.add_argument("--subject-offset", default="18,7", help="meters north,east of home")
+    ap.add_argument("--bystanders", type=int, default=0, help="upright people drawn near the subject (0-4)")
     args = ap.parse_args()
     home = tuple(float(x) for x in args.home.split(","))
     n, e = (float(x) for x in args.subject_offset.split(","))
     slat, slng = offset_latlng(home[0], home[1], 0, n)
     slat, slng = offset_latlng(slat, slng, 90, e)
-    sim = Sim(home, (slat, slng))
+    sim = Sim(home, (slat, slng), max(0, min(4, args.bystanders)))
     ws_url = args.server.replace("http", "ws", 1) + "/ws/drone"
     print(f"sim: home={home} subject={sim.subject} -> {ws_url}")
 

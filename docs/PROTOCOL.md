@@ -99,7 +99,19 @@ The integrated server accepts nonempty frames up to 2 MB only while a drone WebS
 - WebSocket disconnect cancels the mission and fails pending commands. Reconnecting requires local re-arm.
 - `GET /state`, `GET /frame.jpg`, `/ws/dashboard`: dashboard data and camera view.
 
-The server's current `found.lat`/`found.lng` are the **aircraft coordinates**, not person geolocation. Detection and confidence require human interpretation.
+`found.lat`/`found.lng` are the **aircraft coordinates**. Detection and confidence require human interpretation.
+
+### Subject disambiguation (multiple people in frame)
+
+Each search decision (`SearchStep`) now carries `candidates[]` — every person the AI can see — and `chosen_index`:
+
+- `candidates[i]`: `bbox` `[x1,y1,x2,y2]` pixels in the judged frame, `posture` (`prone|sitting|upright|unknown`), `is_moving`, `subject_confidence` (0–1, "is *this* the reported subject"), `reason`.
+- The prompt orders the pick: prone/lying > sitting > upright; motionless across steps > moving; nearest the frame centre (the aircraft hovers over the reported GPS point). If the top two are within 0.15 the AI must keep searching rather than commit.
+- `safety.check_found` enforces this deterministically: `found` is rejected unless `confidence >= 0.8`, `candidates` is non-empty, `chosen_index` is valid, the chosen posture is `prone`/`sitting`, and the chosen `subject_confidence` beats every other candidate by `min_candidate_margin` (0.15). A rejected `found` is logged and the loop continues.
+- The server projects each bbox onto the ground using altitude, heading and gimbal pitch (`geometry.py`, flat-ground assumption, `CAMERA_HFOV_DEG` default 73). Each candidate gains `est_north_m`/`est_east_m`/`est_range_m` (relative to the aircraft), `est_lat`/`est_lng`, and `est_distance_from_report_m`; these are `null` when the ray does not reach the ground. Estimates, not a survey.
+- `found` gains `people_in_frame`, `subject` (the chosen candidate incl. estimates), `subject_lat`/`subject_lng`, `subject_distance_from_report_m`, and `candidates`.
+- Dashboard `step` events carry `candidates` and `frame` `[w,h]`; `GET /step.jpg` returns the exact frame the last decision was made on, and the dashboard freezes on it after a `found` so drawn boxes match the evidence. `/state` includes `last_step`.
+- `sim_drone.py --bystanders N` draws upright walkers alongside the prone subject to exercise this path. The local detector (if installed) now reports all `persons`, not only the best box.
 
 ## Native Watch alert protocol (v1)
 

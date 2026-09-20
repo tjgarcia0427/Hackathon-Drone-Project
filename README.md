@@ -20,7 +20,7 @@ flowchart LR
 
 The server interprets images and chooses small actions. The iPhone validates those actions and runs a deterministic local flight-control loop through DJI's SDK. The pilot takes off manually and enables flight control locally on the iPhone before server commands can move the aircraft. Reconnecting never automatically re-arms it.
 
-The native **Watch app** now provides Send Help and a deliberate shake gesture, a five-second cancel countdown, location capture, receipts/retries and default-on Test mode. Shake runs only while the app is active; it is not Apple's built-in fall detection. See [Watch setup and first test](docs/WATCH_SETUP.md). A visual "found" result is a candidate for human review; its current map coordinates are the aircraft's location, not a calculated location of the person.
+The native **Watch app** now provides Send Help and a deliberate shake gesture, a five-second cancel countdown, location capture, receipts/retries and default-on Test mode. Shake runs only while the app is active; it is not Apple's built-in fall detection. See [Watch setup and first test](docs/WATCH_SETUP.md). A visual "found" result is a candidate for human review. With several people in frame the AI lists every person and must pick one clearly-preferred prone/motionless candidate (server-enforced, see [PROTOCOL.md](docs/PROTOCOL.md#subject-disambiguation-multiple-people-in-frame)); the dashboard draws the boxes and shows an estimated subject distance from the reported point (bbox projected to the ground — an estimate, while `found.lat/lng` remain the aircraft's location).
 
 ## Start here
 

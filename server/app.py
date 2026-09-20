@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 
 import ai_backends
 import detector
+import geometry
 import planner
 import safety
 import watch_alerts
@@ -54,6 +55,8 @@ class State:
         self.latest_frame: bytes | None = None
         self.latest_detection: dict | None = None
         self.found: dict | None = None
+        self.last_step: dict | None = None  # latest AI decision incl. candidates, for dashboard overlays
+        self.step_frame: bytes | None = None  # the exact JPEG that decision was made on (evidence frame)
         self.drone_ws: WebSocket | None = None
         self.dash: set[WebSocket] = set()
         self.pending_acks: dict[str, asyncio.Future] = {}
@@ -73,6 +76,7 @@ class State:
             "drone_connected": self.drone_ws is not None,
             "detector": detector.available(),
             "found": self.found,
+            "last_step": self.last_step,
             "log": self.log[-40:],
         }
 
@@ -198,7 +202,7 @@ def begin_incident(fall: FallEvent, watch_event_id: str | None = None) -> int:
     S.planning = True
     S.watch_event_id = watch_event_id
     S.plan = S.plan_verdict = None
-    S.incident, S.found, S.history = fall, None, []
+    S.incident, S.found, S.last_step, S.step_frame, S.history = fall, None, None, None, []
     S.phase = "planned"
     log(f"HELP INCIDENT at {fall.latitude:.6f},{fall.longitude:.6f} ±{fall.accuracy}m ({fall.source})")
     return S.plan_epoch
@@ -390,6 +394,15 @@ async def frame_jpg():
     return Response(S.latest_frame, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
+@app.get("/step.jpg")
+async def step_jpg():
+    """The frame the last AI decision was based on — the evidence an operator reviews on 'found'."""
+    from fastapi.responses import Response
+    if not S.step_frame:
+        raise HTTPException(404)
+    return Response(S.step_frame, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
 @app.get("/state")
 async def state() -> dict:
     return S.snapshot()
@@ -432,7 +445,7 @@ async def reset() -> dict:
     S.frame_epoch = getattr(S, "frame_epoch", 0) + 1
     await iphone_cancel_mission()
     await iphone_stop("mission reset")
-    S.incident = S.plan = S.plan_verdict = S.found = None
+    S.incident = S.plan = S.plan_verdict = S.found = S.last_step = S.step_frame = None
     S.history, S.phase = [], "idle"
     S.latest_frame = S.latest_detection = None
     S.latest_frame_at = 0.0
@@ -441,6 +454,41 @@ async def reset() -> dict:
 
 
 # ---------- mission runner ----------
+
+def describe_candidates(step: SearchStep, frame_dims: tuple[int, int] | None,
+                        drone: DroneState, plan: MissionPlan) -> list[dict]:
+    """Candidates as the AI reported them, plus a ground-projected position for each box."""
+    out = []
+    for i, c in enumerate(step.candidates):
+        item = {"index": i, **c.model_dump(), "chosen": i == step.chosen_index,
+                "est_north_m": None, "est_east_m": None, "est_range_m": None,
+                "est_lat": None, "est_lng": None, "est_distance_from_report_m": None}
+        hit = None
+        if frame_dims and len(c.bbox) == 4:
+            hit = geometry.locate(c.bbox, *frame_dims, drone_lat=drone.latitude, drone_lng=drone.longitude,
+                                  altitude_m=drone.altitude_m, heading_deg=drone.heading_deg,
+                                  gimbal_pitch_deg=drone.gimbal_pitch_deg,
+                                  report_lat=plan.target_lat, report_lng=plan.target_lng)
+        if hit:
+            item.update(est_north_m=hit.north_m, est_east_m=hit.east_m, est_range_m=hit.range_m,
+                        est_lat=hit.lat, est_lng=hit.lng, est_distance_from_report_m=hit.distance_from_report_m)
+        out.append(item)
+    return out
+
+
+def summarize_candidates(candidates: list[dict], chosen: int | None) -> str:
+    """Compact one-liner for the step history the AI reads back (lets it track people across steps)."""
+    if not candidates:
+        return "0 people in frame"
+    parts = []
+    for c in candidates:
+        d = c.get("est_distance_from_report_m")
+        parts.append(f"#{c['index'] + 1}{'*' if c['chosen'] else ''} {c['posture']}"
+                     f"{' moving' if c['is_moving'] else ' still'} bbox={c['bbox']}"
+                     f"{'' if d is None else f' ~{d}m from report'} p={c['subject_confidence']:.2f}")
+    who = "no subject chosen" if chosen is None or chosen >= len(candidates) else f"subject=#{chosen + 1}"
+    return f"{len(candidates)} people in frame, {who}: " + "; ".join(parts)
+
 
 async def run_mission() -> None:
     plan = S.plan
@@ -455,30 +503,48 @@ async def run_mission() -> None:
             frame_at = await iphone_fresh_frame(time.monotonic())
             if not iphone_telemetry_ready():
                 raise RuntimeError("lost telemetry")
+            judged_frame = S.latest_frame
             step: SearchStep = await asyncio.wait_for(asyncio.to_thread(
-                planner.next_search_step, S.drone, S.latest_frame, S.latest_detection,
+                planner.next_search_step, S.drone, judged_frame, S.latest_detection,
                 S.history, plan.target_lat, plan.target_lng,
             ), planner.search_timeout())
             if not iphone_telemetry_ready() or time.monotonic() - frame_at > planner.search_timeout() + 5.0:
                 raise RuntimeError("planner result based on stale frame/telemetry")
             verdict = safety.check_step(step, S.drone, *home, step_no)
-            desc = f"step {step_no + 1}: {step.action} {step.model_dump(exclude_none=True, exclude={'action', 'observation'})} — {step.observation}"
+            frame_dims = geometry.frame_size(judged_frame)
+            S.step_frame = judged_frame
+            candidates = describe_candidates(step, frame_dims, S.drone, plan)
+            desc = (f"step {step_no + 1}: {step.action} "
+                    f"{step.model_dump(exclude_none=True, exclude={'action', 'observation', 'candidates', 'chosen_index'})} "
+                    f"[{summarize_candidates(candidates, step.chosen_index)}] — {step.observation}")
             S.history.append(desc)
             log(("✓ " if verdict.ok else f"✗ ({verdict.reason}) ") + desc)
-            await broadcast({"type": "step", "step": step.model_dump(), "ok": verdict.ok, "reason": verdict.reason})
+            S.last_step = {"step": step.model_dump(), "candidates": candidates, "frame": frame_dims,
+                           "ok": verdict.ok, "reason": verdict.reason}
+            await broadcast({"type": "step", **S.last_step})
             if not verdict.ok:
                 continue
             if step.action == "found":
+                pick = candidates[step.chosen_index]
                 S.found = {
                     "lat": S.drone.latitude, "lng": S.drone.longitude,
                     "confidence": step.confidence,
                     "distance_from_report_m": round(safety.haversine_m(
                         plan.target_lat, plan.target_lng, S.drone.latitude, S.drone.longitude), 1),
                     "observation": step.observation,
+                    # Subject-level estimate: chosen bbox projected onto the ground (null if the ray missed).
+                    "people_in_frame": len(candidates),
+                    "subject": pick,
+                    "subject_lat": pick.get("est_lat"), "subject_lng": pick.get("est_lng"),
+                    "subject_distance_from_report_m": pick.get("est_distance_from_report_m"),
+                    "candidates": candidates,
                 }
                 S.phase = "found"
                 S.watch.update(S.watch_event_id, "found", "Visual candidate found; operator review required")
-                log(f"SUBJECT LOCATED — {S.found['distance_from_report_m']}m from report, conf {step.confidence:.2f}")
+                subject_d = pick.get("est_distance_from_report_m")
+                log(f"SUBJECT LOCATED — {len(candidates)} in frame, subject {pick['posture']}"
+                    f"{'' if subject_d is None else f' ~{subject_d}m from report'} "
+                    f"(aircraft {S.found['distance_from_report_m']}m), conf {step.confidence:.2f}")
                 await send_cmd("hold")
                 await push_state()
                 return
