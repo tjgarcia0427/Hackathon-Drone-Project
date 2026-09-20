@@ -3,11 +3,11 @@
 @interface DroneBridge : NSObject
 @property(nonatomic,strong,readonly) BridgeClient *client;
 @property(nonatomic,copy) void (^log)(NSString *);
-// Structured telemetry for the view layer, published at 1 Hz and on every control-state change.
-// Keys: started, mock, aircraft, serverOnline, battery, altitude, heading, latitude, longitude,
-// gps, homeSet, flying, distanceFromHome, armed, flightEnabled, returning, released,
-// releasedLowBattery, command (e.g. "yaw (cmd-42)"), lastCommandAt.
-@property(nonatomic,copy) void (^updated)(NSDictionary *telemetry);
+// Keep the original callback compatible with the bench-tested view controller.
+@property(nonatomic,copy) void (^updated)(NSString *status);
+// Read-only UI state, delivered on the main thread at 1 Hz. Call telemetry on the
+// main thread for a fresh gate check. No SDK commands are issued by this getter.
+@property(nonatomic,copy) void (^stateUpdated)(NSDictionary *telemetry);
 - (NSDictionary *)telemetry;
 - (instancetype)initWithPreview:(UIView *)preview mock:(BOOL)mock;
 - (void)start;

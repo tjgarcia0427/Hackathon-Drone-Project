@@ -1,6 +1,8 @@
 #import <UIKit/UIKit.h>
 #import "DroneBridge.h"
 #import "Navigation.h"
+#import "BridgePresentation.h"
+#import <QuartzCore/QuartzCore.h>
 
 // ---------------------------------------------------------------------------
 // Design tokens (Guardian Angel redesign handoff, turn 2 / #2a). Public-safety
@@ -120,7 +122,7 @@ static UIView *CardHeader(NSString *title, UIView *meta, UIEdgeInsets pad) {
 typedef NS_ENUM(NSInteger, GAStepState) { GAStepLocked, GAStepInProgress, GAStepComplete, GAStepReleased };
 @interface GAStepRow : UIView
 @property(nonatomic,strong) UIView *box;
-@property(nonatomic,strong) UILabel *glyph, *title, *detail, *tag;
+@property(nonatomic,strong) UILabel *glyph, *title, *detail, *statusTag;
 @property(nonatomic,strong) UIImageView *icon;
 - (instancetype)initWithNumber:(NSInteger)n title:(NSString *)title;
 - (void)setState:(GAStepState)state detail:(NSString *)detail;
@@ -138,9 +140,9 @@ typedef NS_ENUM(NSInteger, GAStepState) { GAStepLocked, GAStepInProgress, GAStep
         self.title=Label(title,Sans(15,UIFontWeightBold),GA_INK);
         self.detail=Label(@"",Sans(12,UIFontWeightRegular),GA_SECONDARY);
         UIStackView *text=VStack(0); [text addArrangedSubview:self.title]; [text addArrangedSubview:self.detail];
-        self.tag=Caps(@"Locked",10,UIFontWeightBold,0.8,GA_MUTED);
-        [self.tag setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
-        UIStackView *row=HStack(12); [row addArrangedSubview:self.box]; [row addArrangedSubview:text]; [row addArrangedSubview:self.tag];
+        self.statusTag=Caps(@"Locked",10,UIFontWeightBold,0.8,GA_MUTED);
+        [self.statusTag setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+        UIStackView *row=HStack(12); [row addArrangedSubview:self.box]; [row addArrangedSubview:text]; [row addArrangedSubview:self.statusTag];
         [self addSubview:row]; Pin(row,self,UIEdgeInsetsMake(10,12,10,12));
         PinBottomRule(Rule(GA_BORDER),self);
     }
@@ -152,17 +154,17 @@ typedef NS_ENUM(NSInteger, GAStepState) { GAStepLocked, GAStepInProgress, GAStep
         case GAStepComplete:
             self.box.backgroundColor=GA_PRIMARY; self.box.layer.borderColor=GA_PRIMARY.CGColor;
             self.icon.image=[UIImage systemImageNamed:@"checkmark"]; self.icon.hidden=NO; self.glyph.hidden=YES;
-            SetCaps(self.tag,@"Complete",0.8); self.tag.textColor=GA_APPROVED; break;
+            SetCaps(self.statusTag,@"Complete",0.8); self.statusTag.textColor=GA_APPROVED; break;
         case GAStepInProgress:
             self.box.backgroundColor=UIColor.whiteColor; self.box.layer.borderColor=GA_PRIMARY.CGColor; self.glyph.textColor=GA_PRIMARY;
-            SetCaps(self.tag,@"In progress",0.8); self.tag.textColor=GA_PRIMARY; self.backgroundColor=GA_INFO_TINT; break;
+            SetCaps(self.statusTag,@"In progress",0.8); self.statusTag.textColor=GA_PRIMARY; self.backgroundColor=GA_INFO_TINT; break;
         case GAStepReleased:
             self.box.backgroundColor=GA_STOP; self.box.layer.borderColor=GA_STOP.CGColor;
             self.icon.image=[UIImage systemImageNamed:@"xmark"]; self.icon.hidden=NO; self.glyph.hidden=YES;
-            SetCaps(self.tag,@"Released",0.8); self.tag.textColor=GA_STOP; self.backgroundColor=GA_ERROR_TINT; break;
+            SetCaps(self.statusTag,@"Released",0.8); self.statusTag.textColor=GA_STOP; self.backgroundColor=GA_ERROR_TINT; break;
         default:
             self.box.backgroundColor=UIColor.whiteColor; self.box.layer.borderColor=GA_DISABLED.CGColor; self.glyph.textColor=GA_DISABLED;
-            self.title.textColor=GA_MUTED; SetCaps(self.tag,@"Locked",0.8); self.tag.textColor=GA_MUTED; break;
+            self.title.textColor=GA_MUTED; SetCaps(self.statusTag,@"Locked",0.8); self.statusTag.textColor=GA_MUTED; break;
     }
 }
 @end
@@ -213,6 +215,7 @@ static UIView *NavyHeader(UIView *content) {
 // Event log (pushed). Full history, newest at the bottom.
 // ---------------------------------------------------------------------------
 @interface LogViewController : UIViewController
+@property(nonatomic,copy) void (^stopAI)(void);
 @property(nonatomic,strong) NSArray<NSDictionary *> *entries;
 @property(nonatomic,strong) UIStackView *rows;
 @property(nonatomic,strong) UIScrollView *scroll;
@@ -232,11 +235,19 @@ static UIView *NavyHeader(UIView *content) {
     [head addArrangedSubview:close];
     UIView *header=NavyHeader(head); [self.view addSubview:header]; header.translatesAutoresizingMaskIntoConstraints=NO;
     self.scroll=[UIScrollView new]; [self.view addSubview:self.scroll]; self.scroll.translatesAutoresizingMaskIntoConstraints=NO;
+    GAButton *stop=[GAButton primary:@"STOP AI — return control to pilot" target:self action:@selector(stopPressed)];
+    stop.fill=GA_STOP; stop.pressedFill=GA_STOP_PRESS; stop.enabled=self.stopAI!=nil;
+    stop.titleLabel.adjustsFontSizeToFitWidth=YES; stop.accessibilityIdentifier=@"log.stop";
+    [self.view addSubview:stop]; stop.translatesAutoresizingMaskIntoConstraints=NO;
+    [NSLayoutConstraint activateConstraints:@[
+        [stop.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:16],
+        [stop.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-16],
+        [stop.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-10]]];
     UIView *card=Card(); [self.scroll addSubview:card]; card.translatesAutoresizingMaskIntoConstraints=NO;
     self.rows=VStack(0); [card addSubview:self.rows]; Pin(self.rows,card,UIEdgeInsetsZero);
     [NSLayoutConstraint activateConstraints:@[
         [header.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],[header.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],[header.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.scroll.topAnchor constraintEqualToAnchor:header.bottomAnchor],[self.scroll.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],[self.scroll.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],[self.scroll.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [self.scroll.topAnchor constraintEqualToAnchor:header.bottomAnchor],[self.scroll.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],[self.scroll.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],[self.scroll.bottomAnchor constraintEqualToAnchor:stop.topAnchor constant:-10],
         [card.topAnchor constraintEqualToAnchor:self.scroll.contentLayoutGuide.topAnchor constant:12],[card.bottomAnchor constraintEqualToAnchor:self.scroll.contentLayoutGuide.bottomAnchor constant:-32],
         [card.leadingAnchor constraintEqualToAnchor:self.scroll.contentLayoutGuide.leadingAnchor constant:16],[card.trailingAnchor constraintEqualToAnchor:self.scroll.contentLayoutGuide.trailingAnchor constant:-16],
         [card.widthAnchor constraintEqualToAnchor:self.scroll.frameLayoutGuide.widthAnchor constant:-32]]];
@@ -252,6 +263,7 @@ static UIView *NavyHeader(UIView *content) {
     if(y>0) [self.scroll setContentOffset:CGPointMake(0,y) animated:NO];
 }
 - (void)close { [self.navigationController popViewControllerAnimated:YES]; }
+- (void)stopPressed { if(self.stopAI) self.stopAI(); }
 @end
 
 // ---------------------------------------------------------------------------
@@ -259,6 +271,10 @@ static UIView *NavyHeader(UIView *content) {
 // ---------------------------------------------------------------------------
 @interface FlightConfirmViewController : UIViewController
 @property(nonatomic,copy) void (^confirm)(void);
+@property(nonatomic,copy) void (^stopAI)(void);
+@property(nonatomic,copy) NSDictionary *(^readTelemetry)(void);
+@property(nonatomic,strong) UILabel *gateReason;
+@property(nonatomic,strong) NSTimer *gateTimer;
 @property(nonatomic,strong) NSArray<UILabel *> *values;
 @property(nonatomic,strong) NSArray<UIImageView *> *marks;
 @property(nonatomic,strong) GAButton *enable;
@@ -301,39 +317,66 @@ static UIView *NavyHeader(UIView *content) {
     cancel.layer.borderWidth=2; cancel.layer.borderColor=GA_SECONDARY.CGColor; cancel.layer.cornerRadius=4; [cancel.heightAnchor constraintEqualToConstant:44].active=YES;
     [cancel addTarget:self action:@selector(dismissSelf) forControlEvents:UIControlEventTouchUpInside];
     self.enable=[GAButton primary:@"Enable flight" target:self action:@selector(go)]; self.enable.titleLabel.font=Sans(15,UIFontWeightBold); self.enable.height.constant=44;
+    self.enable.enabled=NO; self.enable.accessibilityIdentifier=@"flight.confirm";
     [buttons addArrangedSubview:cancel]; [buttons addArrangedSubview:self.enable];
     [body addArrangedSubview:Spacer(4)]; [body addArrangedSubview:buttons];
+    self.gateReason=Label(@"Waiting for current aircraft state.",Sans(12,UIFontWeightRegular),GA_STOP);
+    self.gateReason.accessibilityIdentifier=@"flight.reason";
+    [body addArrangedSubview:self.gateReason];
+    GAButton *stop=[GAButton primary:@"STOP AI" target:self action:@selector(stopPressed)];
+    stop.fill=GA_STOP; stop.pressedFill=GA_STOP_PRESS; stop.enabled=self.stopAI!=nil;
+    stop.accessibilityIdentifier=@"flight.stop"; [body addArrangedSubview:stop];
     UIStackView *all=VStack(0); [all addArrangedSubview:top];
     UIView *pad=[UIView new]; [pad addSubview:body]; Pin(body,pad,UIEdgeInsetsMake(12,20,20,20)); [all addArrangedSubview:pad];
     [card addSubview:all]; Pin(all,card,UIEdgeInsetsZero);
-    [self.view addSubview:card]; card.translatesAutoresizingMaskIntoConstraints=NO;
+    UIScrollView *scroll=[UIScrollView new]; [self.view addSubview:scroll]; Pin(scroll,self.view,UIEdgeInsetsZero);
+    [scroll addSubview:card]; card.translatesAutoresizingMaskIntoConstraints=NO;
+    NSLayoutConstraint *center=[card.centerYAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.centerYAnchor]; center.priority=UILayoutPriorityDefaultLow;
     [NSLayoutConstraint activateConstraints:@[
-        [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],[card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
-        [card.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor]]];
+        [card.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor constant:20],
+        [card.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor constant:-20],
+        [card.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-40],
+        [card.topAnchor constraintGreaterThanOrEqualToAnchor:scroll.contentLayoutGuide.topAnchor constant:20],
+        [card.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-20], center]];
+    __weak typeof(self) weakSelf=self;
+    self.gateTimer=[NSTimer scheduledTimerWithTimeInterval:0.25 repeats:YES block:^(NSTimer *timer){
+        if(weakSelf.readTelemetry) [weakSelf updateWithTelemetry:weakSelf.readTelemetry()];
+    }];
+    [[NSRunLoop mainRunLoop] addTimer:self.gateTimer forMode:NSRunLoopCommonModes];
 }
 // Live gate values from the bridge telemetry; a failing check turns red, shows ×, and disables confirm.
 - (void)updateWithTelemetry:(NSDictionary *)t {
     if(!self.values) return;
     double battery=[t[@"battery"] doubleValue], altitude=[t[@"altitude"] doubleValue], distance=[t[@"distanceFromHome"] doubleValue];
-    BOOL fresh=[t[@"telemetryFresh"] boolValue] && [t[@"gps"] boolValue] && [t[@"homeSet"] boolValue];
-    BOOL ok[3]={fresh && battery>=30, fresh && altitude>=5 && altitude<=30, fresh && distance>=0 && distance<=40};
-    NSString *text[3]={battery<0?@"—":[NSString stringWithFormat:@"%.0f%%",battery],[NSString stringWithFormat:@"%.1f m",altitude],distance<0?@"—":[NSString stringWithFormat:@"%.0f m",distance]};
+    BOOL fresh=[t[@"positionFresh"] boolValue], batteryFresh=[t[@"batteryFresh"] boolValue];
+    BOOL ok[3]={batteryFresh && isfinite(battery) && battery>=30, fresh && isfinite(altitude) && altitude>=5 && altitude<=30, fresh && isfinite(distance) && distance>=0 && distance<=40};
+    NSString *text[3]={!batteryFresh || battery<0?@"—":[NSString stringWithFormat:@"%.0f%%",battery],!fresh?@"—":[NSString stringWithFormat:@"%.1f m",altitude],!fresh || distance<0?@"—":[NSString stringWithFormat:@"%.0f m",distance]};
     BOOL all=YES;
     for(int i=0;i<3;i++) {
         self.values[i].text=text[i]; self.values[i].textColor=ok[i]?GA_INK:GA_STOP;
         self.marks[i].image=[UIImage systemImageNamed:ok[i]?@"checkmark":@"xmark"]; self.marks[i].tintColor=ok[i]?GA_APPROVED:GA_STOP;
         all=all && ok[i];
     }
-    self.enable.enabled=all;
+    self.enable.enabled=all && GACanConfirmFlight(t);
+    self.gateReason.text=self.enable.enabled?([t[@"mock"] boolValue]?@"MOCK: simulated flight only. No aircraft will move.":@"Checks pass. Confirm only when the pilot is ready."):(t[@"flightBlockReason"]?:@"Waiting for current aircraft state.");
+    if(!self.enable.enabled && !self.gateReason.text.length) self.gateReason.text=@"Current flight checks do not pass.";
+    self.gateReason.textColor=self.enable.enabled?GA_SECONDARY:GA_STOP;
 }
 - (void)dismissSelf { [self dismissViewControllerAnimated:NO completion:nil]; }
-- (void)go { void (^c)(void)=self.confirm; [self dismissViewControllerAnimated:NO completion:^{ if(c) c(); }]; }
+- (void)go {
+    NSDictionary *t=self.readTelemetry?self.readTelemetry():nil;
+    [self updateWithTelemetry:t];
+    if(!GACanConfirmFlight(t)) return;
+    void (^c)(void)=self.confirm;
+    [self dismissViewControllerAnimated:NO completion:^{ if(c) c(); }];
+}
+- (void)stopPressed { if(self.stopAI) self.stopAI(); [self dismissSelf]; }
+- (void)viewDidDisappear:(BOOL)animated { [super viewDidDisappear:animated]; [self.gateTimer invalidate]; self.gateTimer=nil; }
 @end
 
 // ---------------------------------------------------------------------------
 // Bridge (root). Header / status strip / scroll content / pinned STOP bar.
 // ---------------------------------------------------------------------------
-typedef NS_ENUM(NSInteger, GAOpState) { GANotStarted, GAMock, GADisarmed, GACameraOnly, GAFlight, GAReturning, GALowBattery };
 
 @interface BridgeViewController : UIViewController <UITextFieldDelegate>
 @property(nonatomic,strong) DroneBridge *bridge;
@@ -350,6 +393,7 @@ typedef NS_ENUM(NSInteger, GAOpState) { GANotStarted, GAMock, GADisarmed, GACame
 // camera
 @property(nonatomic,strong) UIView *preview;
 @property(nonatomic,strong) UILabel *camSource, *camCoords, *camClock;
+@property(nonatomic,strong) UILabel *mockPreview;
 // telemetry
 @property(nonatomic,strong) NSArray<GATeleCell *> *cells;
 // procedure
@@ -367,6 +411,8 @@ typedef NS_ENUM(NSInteger, GAOpState) { GANotStarted, GAMock, GADisarmed, GACame
 @property(nonatomic,strong) UILabel *logCount;
 @property(nonatomic,weak) FlightConfirmViewController *confirm;
 @property(nonatomic,strong) NSDateFormatter *clock;
+@property(nonatomic,strong) UILabel *commandTitle;
+@property(nonatomic,strong) NSTimer *displayTimer;
 @end
 
 @implementation BridgeViewController
@@ -424,7 +470,7 @@ typedef NS_ENUM(NSInteger, GAOpState) { GANotStarted, GAMock, GADisarmed, GACame
     [self.stopButton setPreferredSymbolConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:20 weight:UIImageSymbolWeightBold] forImageInState:UIControlStateNormal];
     self.stopButton.imageEdgeInsets=UIEdgeInsetsMake(0,0,0,10);
     self.stopButton.titleLabel.adjustsFontSizeToFitWidth=YES; self.stopButton.titleLabel.minimumScaleFactor=0.8;
-    self.stopButton.enabled=NO;
+    self.stopButton.enabled=NO; self.stopButton.accessibilityIdentifier=@"bridge.stop";
     [bar addSubview:self.stopButton]; self.stopButton.translatesAutoresizingMaskIntoConstraints=NO;
 
     for(UIView *v in @[header,self.strip,scroll,bar]) { v.translatesAutoresizingMaskIntoConstraints=NO; [self.view addSubview:v]; }
@@ -456,8 +502,8 @@ typedef NS_ENUM(NSInteger, GAOpState) { GANotStarted, GAMock, GADisarmed, GACame
     UIView *overlay=[UIView new]; overlay.userInteractionEnabled=NO; overlay.layer.cornerRadius=4; overlay.clipsToBounds=YES;
     GAGradientView *top=[[GAGradientView alloc] initTop:YES], *bottom=[[GAGradientView alloc] initTop:NO];
     self.camSource=Label(@"NO FEED",Mono(11,UIFontWeightRegular),UIColor.whiteColor); self.camSource.numberOfLines=1;
-    UIStackView *rec=HStack(6); UIView *recDot=[self dot]; recDot.backgroundColor=GA_ERROR; [rec addArrangedSubview:recDot]; [rec addArrangedSubview:Label(@"REC",Mono(11,UIFontWeightRegular),UIColor.whiteColor)];
-    UIStackView *topRow=HStack(8); [topRow addArrangedSubview:self.camSource]; [topRow addArrangedSubview:Gap()]; [topRow addArrangedSubview:rec];
+    UIStackView *topRow=HStack(8); [topRow addArrangedSubview:self.camSource]; [topRow addArrangedSubview:Gap()];
+    [topRow addArrangedSubview:Label(@"PREVIEW",Mono(11,UIFontWeightRegular),UIColor.whiteColor)];
     [top addSubview:topRow]; Pin(topRow,top,UIEdgeInsetsMake(8,10,8,10));
     self.camCoords=Label(@"—",Mono(11,UIFontWeightRegular),UIColor.whiteColor); self.camCoords.numberOfLines=1;
     self.camClock=Label(@"",Mono(11,UIFontWeightRegular),UIColor.whiteColor); self.camClock.numberOfLines=1;
@@ -468,6 +514,13 @@ typedef NS_ENUM(NSInteger, GAOpState) { GANotStarted, GAMock, GADisarmed, GACame
         [top.topAnchor constraintEqualToAnchor:overlay.topAnchor],[top.leadingAnchor constraintEqualToAnchor:overlay.leadingAnchor],[top.trailingAnchor constraintEqualToAnchor:overlay.trailingAnchor],
         [bottom.bottomAnchor constraintEqualToAnchor:overlay.bottomAnchor],[bottom.leadingAnchor constraintEqualToAnchor:overlay.leadingAnchor],[bottom.trailingAnchor constraintEqualToAnchor:overlay.trailingAnchor]]];
     UIView *wrap=[UIView new]; [wrap addSubview:self.preview]; Pin(self.preview,wrap,UIEdgeInsetsZero); [wrap addSubview:overlay]; Pin(overlay,wrap,UIEdgeInsetsZero);
+    self.mockPreview=Label(@"MOCK HARDWARE\nNo live camera\nTest frames are sent to the server",Mono(12,UIFontWeightRegular),UIColor.whiteColor);
+    self.mockPreview.textAlignment=NSTextAlignmentCenter; self.mockPreview.hidden=YES;
+    [overlay addSubview:self.mockPreview]; self.mockPreview.translatesAutoresizingMaskIntoConstraints=NO;
+    [NSLayoutConstraint activateConstraints:@[
+        [self.mockPreview.centerYAnchor constraintEqualToAnchor:overlay.centerYAnchor],
+        [self.mockPreview.leadingAnchor constraintEqualToAnchor:overlay.leadingAnchor constant:16],
+        [self.mockPreview.trailingAnchor constraintEqualToAnchor:overlay.trailingAnchor constant:-16]]];
     return wrap;
 }
 - (UIView *)buildTelemetry {
@@ -508,20 +561,24 @@ typedef NS_ENUM(NSInteger, GAOpState) { GANotStarted, GAMock, GADisarmed, GACame
     [mr addArrangedSubview:self.mockSwitch];
     [self.mockRow addSubview:mr]; Pin(mr,self.mockRow,UIEdgeInsetsMake(0,2,4,0));
     self.startButton=[GAButton primary:@"Start bridge" target:self action:@selector(start)];
+    self.startButton.accessibilityIdentifier=@"bridge.start";
     self.address=[UITextField new]; self.address.borderStyle=UITextBorderStyleRoundedRect; self.address.keyboardType=UIKeyboardTypeURL;
     self.address.autocapitalizationType=UITextAutocapitalizationTypeNone; self.address.autocorrectionType=UITextAutocorrectionTypeNo;
     self.address.placeholder=@"http://YOUR-LAPTOP-IP:8000"; self.address.font=Mono(14,UIFontWeightRegular); self.address.delegate=self;
     self.address.text=[[NSUserDefaults standardUserDefaults] stringForKey:@"serverURL"]?:@"http://192.168.1.100:8000";
     self.address.accessibilityLabel=@"Server base URL"; [self.address.heightAnchor constraintEqualToConstant:44].active=YES;
     self.connectButton=[GAButton primary:@"Connect server" target:self action:@selector(connect)];
+    self.connectButton.accessibilityIdentifier=@"bridge.connect";
     self.cameraButton=[GAButton primary:@"Arm camera only" target:self action:@selector(camera)];
-    self.cameraHelp=Label(@"Gimbal and frames go to the server. Nothing moves.",Sans(12,UIFontWeightRegular),GA_SECONDARY); self.cameraHelp.textAlignment=NSTextAlignmentCenter;
+    self.cameraButton.accessibilityIdentifier=@"bridge.camera";
+    self.cameraHelp=Label(@"Optional camera check. Server can tilt the gimbal; aircraft flight stays with the pilot.",Sans(12,UIFontWeightRegular),GA_SECONDARY); self.cameraHelp.textAlignment=NSTextAlignmentCenter;
     self.flightButton=[GAButton primary:@"Enable flight" target:self action:@selector(flight)];
+    self.flightButton.accessibilityIdentifier=@"bridge.flight";
     self.flightHelp=Label(@"Aircraft airborne at 5–30 m, within 40 m of the anchor. You will confirm first.",Sans(12,UIFontWeightRegular),GA_SECONDARY); self.flightHelp.textAlignment=NSTextAlignmentCenter;
     self.commandRow=[UIView new]; UIStackView *cr=HStack(12);
     UIView *amber=[UIView new]; amber.backgroundColor=GA_CAUTION_DK; amber.layer.cornerRadius=5;
     [amber.widthAnchor constraintEqualToConstant:10].active=YES; [amber.heightAnchor constraintEqualToConstant:10].active=YES;
-    UIStackView *ct=VStack(0); [ct addArrangedSubview:Label(@"Server command in progress",Sans(14,UIFontWeightBold),GA_INK)];
+    UIStackView *ct=VStack(0); self.commandTitle=Label(@"Awaiting server command",Sans(14,UIFontWeightBold),GA_INK); [ct addArrangedSubview:self.commandTitle];
     self.commandText=Label(@"Awaiting server command",Mono(12,UIFontWeightRegular),GA_SECONDARY); [ct addArrangedSubview:self.commandText];
     [cr addArrangedSubview:amber]; [cr addArrangedSubview:ct]; [self.commandRow addSubview:cr]; Pin(cr,self.commandRow,UIEdgeInsetsZero);
     for(UIView *x in @[self.mockRow,self.startButton,self.address,self.connectButton,self.cameraButton,self.cameraHelp,self.flightButton,self.flightHelp,self.commandRow]) { x.hidden=YES; [self.actionStack addArrangedSubview:x]; }
@@ -560,95 +617,101 @@ typedef NS_ENUM(NSInteger, GAOpState) { GANotStarted, GAMock, GADisarmed, GACame
 }
 - (void)openLog {
     LogViewController *l=[LogViewController new]; l.entries=self.entries.copy;
+    __weak typeof(self) weakSelf=self;
+    if(self.bridge) l.stopAI=^{ [weakSelf stop]; };
     [self.navigationController pushViewController:l animated:YES];
 }
 
 // State ---------------------------------------------------------------------------
-- (GAOpState)opState {
-    NSDictionary *t=self.telemetry; if(!self.bridge || !t) return GANotStarted;
-    if([t[@"returning"] boolValue]) return GAReturning;
-    if([t[@"releasedLowBattery"] boolValue]) return GALowBattery;
-    if([t[@"flightEnabled"] boolValue]) return GAFlight;
-    if([t[@"armed"] boolValue]) return GACameraOnly;
-    if([t[@"mock"] boolValue]) return GAMock;
-    return GADisarmed;
+- (void)refreshState {
+    self.telemetry=self.bridge?[self.bridge telemetry]:nil;
+    [self render];
 }
 - (void)render {
-    NSDictionary *t=self.telemetry; GAOpState s=[self opState];
-    BOOL mock=[t[@"mock"] boolValue], online=[t[@"serverOnline"] boolValue], aircraft=[t[@"aircraft"] boolValue];
-    BOOL armed=[t[@"armed"] boolValue], flight=[t[@"flightEnabled"] boolValue], released=[t[@"released"] boolValue] || s==GAReturning;
+    NSDictionary *t=self.telemetry; GAOpState s=GAStateForTelemetry(t);
+    BOOL started=self.bridge!=nil, mock=[t[@"mock"] boolValue], online=[t[@"serverOnline"] boolValue], aircraft=[t[@"aircraft"] boolValue];
+    BOOL armed=[t[@"armed"] boolValue], flight=[t[@"flightEnabled"] boolValue];
+    BOOL positionFresh=[t[@"positionFresh"] boolValue], batteryFresh=[t[@"batteryFresh"] boolValue];
     double battery=t?[t[@"battery"] doubleValue]:-1;
-
-    // Header
     self.serverText.text=online?@"SERVER ONLINE":@"SERVER OFFLINE"; self.serverDot.backgroundColor=online?GA_OK:GA_STOP;
-    if(self.bridge && mock) { self.aircraftText.text=@"MOCK HARDWARE"; self.aircraftDot.backgroundColor=GA_DISABLED; }
-    else if(self.bridge && aircraft) { self.aircraftText.text=@"MAVIC AIR 2"; self.aircraftDot.backgroundColor=GA_OK; }
-    else { self.aircraftText.text=@"NO AIRCRAFT"; self.aircraftDot.backgroundColor=GA_STOP; }
+    self.aircraftText.text=started && mock?@"MOCK HARDWARE":started && aircraft?@"MAVIC AIR 2":@"NO AIRCRAFT";
+    self.aircraftDot.backgroundColor=started && mock?GA_DISABLED:started && aircraft?GA_OK:GA_STOP;
 
-    // Status strip
     UIColor *bg=GA_BORDER, *fg=GA_INK; NSString *icon=@"power", *label=@"Not started", *sub=@"Start the bridge to begin the procedure.";
     switch(s) {
-        case GAMock: icon=@"flask"; label=@"Mock mode — no aircraft"; sub=online?@"Simulated hardware. Server link online. Nothing will fly.":@"Simulated hardware. Connect the server to continue."; break;
-        case GADisarmed: bg=GA_SECONDARY; fg=UIColor.whiteColor; icon=@"lock.fill"; label=@"Disarmed"; sub=aircraft?@"Aircraft connected. Server has no control.":@"Waiting for the aircraft. Server has no control."; break;
-        case GACameraOnly: bg=GA_PRIMARY; fg=UIColor.whiteColor; icon=@"video.fill"; label=@"Camera only"; sub=@"Gimbal under server control. Flight remains with the pilot."; break;
-        case GAFlight: bg=GA_CAUTION; icon=@"exclamationmark.triangle.fill"; label=@"AI flight control active"; sub=@"Server may move the aircraft. RC input overrides at any time."; break;
-        case GAReturning: bg=GA_SECONDARY; fg=UIColor.whiteColor; icon=@"house.fill"; label=@"App control released — DJI RTH"; sub=@"Return-to-home in progress. Cancel or take over with the RC."; break;
-        case GALowBattery: bg=GA_STOP; fg=UIColor.whiteColor; icon=@"battery.25"; label=[NSString stringWithFormat:@"Control released — battery %.0f%%",MAX(battery,0)]; sub=@"Below the 25% floor. Land or return with the RC now."; break;
+        case GAMock: icon=@"testtube.2"; label=@"Mock mode — no aircraft"; sub=online?@"Simulated hardware. Server online. Nothing will fly.":@"Simulated hardware. Connect the server to continue."; break;
+        case GADisarmed: bg=GA_SECONDARY; fg=UIColor.whiteColor; icon=@"lock.fill"; label=@"Disarmed"; sub=aircraft?@"Aircraft connected. App flight control is disabled.":@"Waiting for the aircraft. App control is disabled."; break;
+        case GACameraOnly: bg=GA_PRIMARY; fg=UIColor.whiteColor; icon=@"video.fill"; label=mock?@"Mock — camera only":@"Camera only"; sub=mock?@"Simulated gimbal commands. No aircraft will move.":@"Server may tilt the gimbal. Flight stays with the pilot."; break;
+        case GAFlight: bg=GA_CAUTION; icon=@"exclamationmark.triangle.fill"; label=mock?@"Mock flight active":@"AI flight control active"; sub=mock?@"Simulated commands only. No aircraft will move.":@"Server may move the aircraft. Keep the RC ready for takeover."; break;
+        case GAReturning: bg=GA_SECONDARY; fg=UIColor.whiteColor; icon=@"house.fill"; label=mock?@"Mock return in progress":@"DJI return in progress"; sub=mock?@"Simulated return. No aircraft will move.":@"DJI controls the return. STOP does not cancel DJI return-to-home."; break;
+        case GALowBattery: bg=GA_STOP; fg=UIColor.whiteColor; icon=@"battery.25"; label=[NSString stringWithFormat:@"Flight disabled — battery %.0f%%",MAX(battery,0)]; sub=@"At least 30% battery is required to enable flight."; break;
+        case GAControlPending: bg=GA_CAUTION; icon=@"clock.fill"; label=[t[@"enabling"] boolValue]?@"Enabling flight control":@"Control change pending"; sub=@"Waiting for DJI confirmation. Keep the RC ready."; break;
+        case GAReleaseFailed: bg=GA_STOP; fg=UIColor.whiteColor; icon=@"exclamationmark.triangle.fill"; label=@"Control release unconfirmed"; sub=@"Use RC pause / mode switch. Press STOP to retry release."; break;
         default: break;
     }
-    UIImage *img=[UIImage systemImageNamed:icon]?:[UIImage systemImageNamed:@"testtube.2"]?:[UIImage systemImageNamed:@"circle.fill"];
-    self.stripIcon.image=img; self.stripIcon.tintColor=fg; SetCaps(self.stripLabel,label,0.6); self.stripLabel.textColor=fg; self.stripSub.text=sub; self.stripSub.textColor=fg;
-    [UIView animateWithDuration:0.2 animations:^{ self.strip.backgroundColor=bg; }];
+    self.stripIcon.image=[UIImage systemImageNamed:icon]; self.stripIcon.tintColor=fg;
+    SetCaps(self.stripLabel,label,0.6); self.stripLabel.textColor=fg; self.stripSub.text=sub; self.stripSub.textColor=fg;
+    if(![self.strip.backgroundColor isEqual:bg]) {
+        if(UIAccessibilityIsReduceMotionEnabled()) self.strip.backgroundColor=bg;
+        else [UIView animateWithDuration:0.2 animations:^{ self.strip.backgroundColor=bg; }];
+    }
 
-    // Camera overlay
-    self.camSource.text=!self.bridge?@"NO FEED":mock?@"MOCK 1280×720 8fps":aircraft?@"CAM 1080p 30fps":@"NO FEED";
-    if(t && [t[@"gps"] boolValue]) {
+    // No recording/FPS claim: neither is provided by the bridge's read-only snapshot.
+    self.camSource.text=!started?@"NO FEED":mock?@"MOCK — NO CAMERA":aircraft?@"DJI CAMERA":@"NO AIRCRAFT";
+    self.mockPreview.hidden=!(started && mock);
+    if(positionFresh) {
         double la=[t[@"latitude"] doubleValue], lo=[t[@"longitude"] doubleValue];
         self.camCoords.text=[NSString stringWithFormat:@"%.4f %@  %.4f %@",fabs(la),la<0?@"S":@"N",fabs(lo),lo<0?@"W":@"E"];
-        self.camClock.text=[self.clock stringFromDate:NSDate.date];
-    } else { self.camCoords.text=@"—"; self.camClock.text=@""; }
+        NSTimeInterval at=[t[@"telemetryAt"] doubleValue];
+        self.camClock.text=at>0?[self.clock stringFromDate:[NSDate dateWithTimeIntervalSince1970:at]]:@"";
+    } else { self.camCoords.text=started?@"GPS / telemetry unavailable":@"—"; self.camClock.text=@""; }
+    self.cells[0].value.text=batteryFresh && battery>=0?[NSString stringWithFormat:@"%.0f%%",battery]:@"—";
+    self.cells[0].value.textColor=batteryFresh && battery>=0 && battery<30?GA_STOP:GA_INK;
+    self.cells[1].value.text=positionFresh?[NSString stringWithFormat:@"%.1f m",[t[@"altitude"] doubleValue]]:@"—";
+    self.cells[2].value.text=positionFresh?[NSString stringWithFormat:@"%.0f°",[t[@"heading"] doubleValue]]:@"—";
+    self.cells[3].value.text=positionFresh?@"OK":started?@"waiting":@"—";
+    self.cells[4].value.text=[t[@"homeSet"] boolValue]?@"Recorded":started?@"waiting":@"—";
 
-    // Telemetry table
-    if(t) {
-        self.cells[0].value.text=battery<0?@"—":[NSString stringWithFormat:@"%.0f%%",battery]; self.cells[0].value.textColor=(battery>=0 && battery<30)?GA_STOP:GA_INK;
-        self.cells[1].value.text=[NSString stringWithFormat:@"%.1f m",[t[@"altitude"] doubleValue]];
-        self.cells[2].value.text=[NSString stringWithFormat:@"%.0f°",[t[@"heading"] doubleValue]];
-        self.cells[3].value.text=[t[@"gps"] boolValue]?@"OK":@"waiting";
-        self.cells[4].value.text=[t[@"homeSet"] boolValue]?@"OK":@"waiting";
-    } else { for(int i=0;i<5;i++) self.cells[i].value.text=@"—"; self.cells[0].value.textColor=GA_INK; }
-
-    // Procedure rows
-    BOOL done[4]={self.bridge!=nil, online, armed, flight};
-    NSInteger inProgress=-1, completed=0;
-    for(int i=0;i<4;i++) { if(done[i]) completed++; else if(inProgress<0) inProgress=i; }
+    BOOL done[4]={started,online,armed,flight}; NSInteger completed=0;
+    NSInteger next=!started?0:!online?1:!armed?2:!flight?3:-1;
     for(int i=0;i<4;i++) {
-        GAStepState st=done[i]?GAStepComplete:(i==inProgress?GAStepInProgress:GAStepLocked);
+        if(done[i]) completed++;
+        GAStepState rowState=done[i]?GAStepComplete:(i==next?GAStepInProgress:GAStepLocked);
         NSString *detail=@"";
-        if(i==0) detail=(self.bridge?mock:self.mockSwitch.on)?@"Mock hardware · no aircraft":@"DJI registered · Mavic Air 2";
+        if(i==0) detail=!started?@"Choose mock or live hardware":mock?@"Mock hardware · no aircraft":aircraft?@"Mavic Air 2 connected":@"Bridge started · waiting for aircraft";
         if(i==1) detail=self.address.text.length?self.address.text:@"Server origin";
-        if(i==2) detail=@"Gimbal and frames to the server";
-        if(i==3) { detail=@"Airborne 5–30 m · within 40 m of anchor"; if(released && !flight) { st=GAStepReleased; detail=@"Released · pilot has control"; } }
-        [self.steps[i] setState:st detail:detail];
+        if(i==2) detail=flight?@"Camera included in flight mode":armed?@"Gimbal under server control":@"Optional camera check before flight";
+        if(i==3) detail=flight?@"Supervised control enabled":@"Stop camera control first · confirm before flight";
+        [self.steps[i] setState:rowState detail:detail];
+        if(i==2 && online && !armed) SetCaps(self.steps[i].statusTag,@"Optional",0.8);
+        if(i==3 && (s==GAControlPending || s==GAReleaseFailed || s==GAReturning)) {
+            [self.steps[i] setState:GAStepLocked detail:sub];
+            SetCaps(self.steps[i].statusTag,s==GAControlPending?@"Pending":@"Blocked",0.8);
+        }
     }
     self.progress.text=[NSString stringWithFormat:@"%ld / 4",(long)completed];
-
-    // Action area
     for(UIView *x in self.actionStack.arrangedSubviews) x.hidden=YES;
-    if(inProgress==0) { self.mockRow.hidden=NO; self.startButton.hidden=NO; }
-    else if(inProgress==1) { self.address.hidden=NO; self.connectButton.hidden=NO; }
-    else if(inProgress==2) { self.cameraButton.hidden=NO; self.cameraHelp.hidden=NO; }
-    else if(inProgress==3) {
-        self.flightButton.hidden=NO; self.flightHelp.hidden=NO;
-        if(s==GAReturning) { self.flightButton.enabled=NO; self.flightHelp.text=@"Available once return-to-home ends and the pilot has control."; }
-        else if(s==GALowBattery) { self.flightButton.enabled=NO; self.flightHelp.text=@"Needs 30% battery to re-enable."; }
-        else { self.flightButton.enabled=YES; self.flightHelp.text=@"Aircraft airborne at 5–30 m, within 40 m of the anchor. You will confirm first."; }
+    BOOL busy=s==GAControlPending || s==GAReleaseFailed || s==GAReturning;
+    self.cameraButton.enabled=started && online && aircraft && !busy && !armed;
+    self.flightButton.enabled=started && online && aircraft && !busy;
+    [self.flightButton setTitle:armed && !flight?@"Stop camera control":@"Enable flight" forState:UIControlStateNormal];
+    if(!started) { self.mockRow.hidden=NO; self.startButton.hidden=NO; }
+    else if(!online) { self.address.hidden=NO; self.connectButton.hidden=NO; }
+    else if(busy) { self.flightHelp.hidden=NO; self.flightHelp.text=sub; }
+    else if(flight) {
+        self.commandRow.hidden=NO; NSString *cmd=t[@"command"];
+        self.commandTitle.text=cmd.length?@"Server command in progress":@"Awaiting server command";
+        self.commandText.text=cmd.length?[NSString stringWithFormat:@"Executing %@",cmd]:@"Supervised flight is enabled";
     } else {
-        self.commandRow.hidden=NO;
-        NSString *cmd=t[@"command"]; self.commandText.text=cmd.length?[NSString stringWithFormat:@"Executing %@",cmd]:@"Awaiting server command";
+        self.flightButton.hidden=NO; self.flightHelp.hidden=NO;
+        if(armed) self.flightHelp.text=@"Stop camera control, then tap Enable flight and confirm. This button only stops control.";
+        else {
+            self.cameraButton.hidden=NO; self.cameraHelp.hidden=NO;
+            NSString *reason=t[@"flightBlockReason"];
+            self.flightHelp.text=reason.length?reason:@"Review current flight checks and confirm when the pilot is ready.";
+        }
     }
-    self.mockSwitch.enabled=self.bridge==nil; self.startButton.enabled=self.bridge==nil;
-    self.stopButton.enabled=self.bridge!=nil;
-    if(t) [self.confirm updateWithTelemetry:t];
+    self.mockSwitch.enabled=!started; self.startButton.enabled=!started; self.stopButton.enabled=started;
 }
 
 // Actions -----------------------------------------------------------------------------
@@ -658,13 +721,15 @@ typedef NS_ENUM(NSInteger, GAOpState) { GANotStarted, GAMock, GADisarmed, GACame
     self.bridge=[[DroneBridge alloc] initWithPreview:self.preview mock:self.mockSwitch.on];
     __weak typeof(self) weakSelf=self;
     self.bridge.log=^(NSString *s){ [weakSelf append:s]; };
-    self.bridge.updated=^(NSDictionary *t){
+    self.bridge.stateUpdated=^(NSDictionary *t){
         __strong typeof(weakSelf) me=weakSelf; if(!me) return;
         if(!NSThread.isMainThread) { dispatch_async(dispatch_get_main_queue(),^{ me.telemetry=t; [me render]; }); return; }
         me.telemetry=t; [me render];
     };
     [self.bridge start];
-    self.telemetry=[self.bridge telemetry]; [self render];
+    [self refreshState];
+    self.displayTimer=[NSTimer scheduledTimerWithTimeInterval:0.25 repeats:YES block:^(NSTimer *timer){ [weakSelf refreshState]; }];
+    [[NSRunLoop mainRunLoop] addTimer:self.displayTimer forMode:NSRunLoopCommonModes];
 }
 - (void)connect {
     [self.view endEditing:YES];
@@ -673,16 +738,28 @@ typedef NS_ENUM(NSInteger, GAOpState) { GANotStarted, GAMock, GADisarmed, GACame
     else [self append:@"Use a server origin such as http://192.168.1.20:8000 (no path)"];
     [self render];
 }
-- (void)camera { [self.bridge armFlight:NO]; }
+- (void)camera { [self.bridge armFlight:NO]; [self refreshState]; }
 - (void)flight {
+    [self refreshState];
+    if([self.telemetry[@"armed"] boolValue] && ![self.telemetry[@"flightEnabled"] boolValue]) {
+        [self.bridge stopAutomation:@"Camera control stopped locally; confirm separately to enable flight"];
+        [self refreshState]; return;
+    }
+    if(!self.bridge || self.presentedViewController || [self.telemetry[@"flightEnabled"] boolValue]) return;
     FlightConfirmViewController *c=[FlightConfirmViewController new];
     c.modalPresentationStyle=UIModalPresentationOverFullScreen;
     __weak typeof(self) weakSelf=self;
-    c.confirm=^{ [weakSelf.bridge armFlight:YES]; };
+    c.readTelemetry=^NSDictionary *{ return [weakSelf.bridge telemetry]; };
+    c.stopAI=^{ [weakSelf stop]; };
+    c.confirm=^{
+        if(GACanConfirmFlight([weakSelf.bridge telemetry])) [weakSelf.bridge armFlight:YES];
+        [weakSelf refreshState];
+    };
     self.confirm=c;
     [self presentViewController:c animated:NO completion:^{ [c updateWithTelemetry:weakSelf.telemetry]; }];
 }
-- (void)stop { [self.bridge stopAutomation:@"Local STOP pressed; pilot control"]; }
+- (void)stop { [self.bridge stopAutomation:@"Local STOP pressed; pilot control"]; [self refreshState]; }
+- (void)dealloc { [self.displayTimer invalidate]; }
 - (BOOL)textFieldShouldReturn:(UITextField *)textField { [textField resignFirstResponder]; return YES; }
 - (void)textFieldDidEndEditing:(UITextField *)textField { [self render]; }
 @end

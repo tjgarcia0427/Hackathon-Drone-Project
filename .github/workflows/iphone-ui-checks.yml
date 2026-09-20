@@ -1,0 +1,49 @@
+name: iPhone UI checks
+on:
+  push:
+    branches: [ui-redesign]
+    paths:
+      - 'iphone-bridge/**'
+      - '.github/workflows/iphone-ui-checks.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify hardware-tested bridge preservation
+        run: python3 iphone-bridge/tests/check_bridge_preservation.py
+      - name: Test UI state and navigation limits
+        run: |
+          xcrun clang -fobjc-arc -framework Foundation -Iiphone-bridge/ios/GuardianAngel iphone-bridge/tests/presentation_test.m -o /tmp/presentation_test
+          /tmp/presentation_test
+          xcrun clang iphone-bridge/tests/navigation_test.c iphone-bridge/ios/GuardianAngel/Navigation.c -lm -o /tmp/navigation_test
+          /tmp/navigation_test
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: iphone-bridge/ios
+      - name: Install pinned DJI dependencies
+        working-directory: iphone-bridge/ios
+        run: |
+          cp Config/Secrets.example.xcconfig Config/Secrets.xcconfig
+          bundle exec pod install
+      - name: Compile and link the production iPhone app (unsigned)
+        working-directory: iphone-bridge/ios
+        run: |
+          set -o pipefail
+          xcodebuild -workspace GuardianAngel.xcworkspace -scheme GuardianAngel -configuration Debug \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build-ci \
+            CODE_SIGNING_ALLOWED=NO build > build-ci.log 2>&1 || { tail -150 build-ci.log; exit 1; }
+          tail -8 build-ci.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iphone-build-log
+          path: iphone-bridge/ios/build-ci.log

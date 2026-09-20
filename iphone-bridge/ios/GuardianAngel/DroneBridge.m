@@ -17,7 +17,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
 @interface DroneBridge () <DJISDKManagerDelegate,DJIFlightControllerDelegate,DJIBatteryDelegate,DJIGimbalDelegate,DJIVideoFeedListener,DJIVideoPreviewerFrameControlDelegate> {
     GAPose _pose, _home, _target;
     BOOL _homeSet, _flying, _gps, _armed, _flightEnabled, _enabling, _mock, _closed;
-    BOOL _snapshotPending, _returning, _rthAccepted, _releaseFailed, _released, _releasedLowBattery;
+    BOOL _snapshotPending, _returning, _rthAccepted, _releaseFailed;
     double _gimbal, _battery, _horizontalSpeed, _verticalSpeed;
     double _fcTime, _batteryTime, _gimbalTime, _videoTime, _lastTick, _lastReport, _lastFrame, _stableSince;
     double _deadline, _yawTarget, _gimbalTarget, _enableTime, _snapshotTime;
@@ -44,30 +44,42 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         self.client.stateChanged=^(BOOL online,NSString *message){
             [weakSelf note:message];
             if(!online) [weakSelf stopAutomation:@"Server link lost"];
-            [weakSelf publish];
         };
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(background) name:UIApplicationWillResignActiveNotification object:nil];
     }
     return self;
 }
 - (void)note:(NSString *)message { if(self.log) self.log(message); }
+
+// Read-only presentation snapshot. Flight decisions remain in armFlight:/flightProblem.
 - (NSDictionary *)telemetry {
     double now=CACurrentMediaTime();
-    BOOL poseOK=_homeSet && GAValidPose(_pose) && GAValidPose(_home);
+    BOOL fcFresh=_mock || (_fcTime>0 && now-_fcTime<1.5);
+    BOOL batteryFresh=_mock || (_batteryTime>0 && now-_batteryTime<5);
+    BOOL poseFresh=fcFresh && _gps && _homeSet && GAValidPose(_pose) && GAValidPose(_home);
+    NSString *blocked=nil;
+    if(_closed) blocked=@"Bridge is closed";
+    else if(_enabling || _returning || _pendingSDKTransitions) blocked=@"Wait for control transition / return to finish";
+    else if(_releaseFailed) blocked=@"Control release is unconfirmed. Use RC takeover, then press STOP to retry.";
+    else if(!self.client.connected) blocked=@"Connect to the server first";
+    else if(!_mock && !self.aircraft) blocked=@"Connect the aircraft first";
+    else if(_armed) blocked=@"Stop camera control before enabling flight";
+    else blocked=[self flightProblem];
     NSString *action=self.active[@"action"], *identifier=self.active[@"cmd_id"];
-    return @{@"started":@(YES),@"mock":@(_mock),@"aircraft":@(_mock || self.aircraft!=nil),
-             @"serverOnline":@(self.client.connected),
-             @"battery":@(_battery),@"altitude":@(_pose.altitude),@"heading":@(fmod(_pose.heading+360,360)),
-             @"latitude":@(_pose.lat),@"longitude":@(_pose.lon),
-             @"gps":@(_gps),@"homeSet":@(_homeSet),@"flying":@(_flying),
-             @"telemetryFresh":@(_mock || (now-_fcTime<1.5 && now-_batteryTime<5)),
-             @"distanceFromHome":@(poseOK?GADistance(_pose.lat,_pose.lon,_home.lat,_home.lon):-1),
-             @"armed":@(_armed),@"flightEnabled":@(_flightEnabled),@"enabling":@(_enabling),
-             @"returning":@(_returning),@"released":@(_released),@"releasedLowBattery":@(_releasedLowBattery),
-             @"releaseFailed":@(_releaseFailed),
+    return @{@"started":@(_lastTick>0 && !_closed), @"mock":@(_mock),
+             @"aircraft":@(_mock || self.aircraft!=nil), @"serverOnline":@(self.client.connected),
+             @"battery":@(_battery), @"batteryFresh":@(batteryFresh), @"positionFresh":@(poseFresh),
+             @"altitude":@(_pose.altitude), @"heading":@(fmod(_pose.heading+360,360)),
+             @"latitude":@(_pose.lat), @"longitude":@(_pose.lon), @"gps":@(_gps), @"homeSet":@(_homeSet),
+             @"flying":@(_flying), @"telemetryFresh":@(fcFresh && batteryFresh),
+             @"distanceFromHome":@(poseFresh?GADistance(_pose.lat,_pose.lon,_home.lat,_home.lon):-1),
+             @"armed":@(_armed), @"flightEnabled":@(_flightEnabled), @"enabling":@(_enabling),
+             @"returning":@(_returning), @"releaseFailed":@(_releaseFailed),
+             @"pendingTransitions":@(_pendingSDKTransitions), @"flightBlockReason":blocked?:@"",
+             @"telemetryAt":@(_fcTime>0 ? NSDate.date.timeIntervalSince1970-(now-_fcTime) : 0),
              @"command":action?[NSString stringWithFormat:@"%@ (%@)",action,identifier?:@"?"]:@""};
 }
-- (void)publish { if(self.updated) { NSDictionary *t=[self telemetry]; Main(^{ if(self.updated) self.updated(t); }); } }
+
 - (void)start {
     _lastTick=CACurrentMediaTime();
     if(_mock) {
@@ -193,10 +205,10 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     if(!self.client.connected) { [self note:@"Connect to the server first"]; return; }
     if(!_mock && !self.aircraft) { [self note:@"Connect the aircraft first"]; return; }
     if(_armed) { [self note:@"Stop AI control before changing control mode"]; return; }
-    if(!flight) { _armed=YES; _released=NO; _releasedLowBattery=NO; [self note:@"Camera commands enabled; flight commands remain disabled"]; [self publish]; return; }
+    if(!flight) { _armed=YES; [self note:@"Camera commands enabled; flight commands remain disabled"]; return; }
     NSString *problem=[self flightProblem]; if(problem) { [self note:problem]; return; }
     _enabling=YES; _enableTime=CACurrentMediaTime(); NSUInteger epoch=++_generation;
-    if(_mock) { _enabling=NO; _armed=YES; _flightEnabled=YES; _released=NO; _releasedLowBattery=NO; [self note:@"MOCK flight enabled"]; [self publish]; return; }
+    if(_mock) { _enabling=NO; _armed=YES; _flightEnabled=YES; [self note:@"MOCK flight enabled"]; return; }
     DJIFlightController *controller=self.fc;
     controller.rollPitchControlMode=DJIVirtualStickRollPitchControlModeVelocity;
     controller.rollPitchCoordinateSystem=DJIVirtualStickFlightCoordinateSystemGround;
@@ -214,9 +226,8 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
             [self releaseController:controller];
             [self note:error.localizedDescription?:issue?:@"Server disconnected"]; return;
         }
-        self->_armed=YES; self->_flightEnabled=YES; self->_released=NO; self->_releasedLowBattery=NO;
+        self->_armed=YES; self->_flightEnabled=YES;
         [self note:@"Flight enabled locally. 1 m/s max; controller pilot remains in charge."];
-        [self publish];
     });}];
 }
 - (void)sendControl:(GAControl)c {
@@ -252,9 +263,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         [self releaseController:self.fc];
     }
     // Do not cancel DJI's own RTH/landing when app or network goes away.
-    if(hadControl) { _released=YES; _releasedLowBattery=[reason hasPrefix:@"Low battery"]; }
     [self note:reason];
-    [self publish];
 }
 - (void)ack:(NSString *)identifier ok:(BOOL)ok error:(NSString *)error {
     if(!identifier.length) return;
@@ -268,7 +277,6 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
 - (void)finish:(BOOL)ok error:(NSString *)error {
     NSString *identifier=self.active[@"cmd_id"]; self.active=nil; _stableSince=0;
     [self ack:identifier ok:ok error:error];
-    [self publish];
 }
 - (void)accept:(NSDictionary *)cmd {
     NSString *identifier=cmd[@"cmd_id"], *action=cmd[@"action"];
@@ -312,7 +320,6 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     self.active=cmd; _stableSince=0;
     _deadline=CACurrentMediaTime()+([action isEqual:@"goto"]?110:rtl?170:23);
     [self note:[NSString stringWithFormat:@"Executing %@ (%@)",action,identifier]];
-    [self publish];
     if([action isEqual:@"yaw"]) _yawTarget=GAWrap(_pose.heading+a);
     if([action isEqual:@"gimbal"]) {
         _gimbalTarget=a;
@@ -390,7 +397,8 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         NSString *status=_returning?@"rtl":self.active?@"searching":@"idle";
         if(_gps && _homeSet && GAValidPose(_pose) && now-_fcTime<1.5 && now-_batteryTime<5 && _battery>=0)
             [self.client send:@{@"type":@"telemetry",@"drone_id":@"air2",@"latitude":@(_pose.lat),@"longitude":@(_pose.lon),@"altitude_m":@(_pose.altitude),@"heading_deg":@(fmod(_pose.heading+360,360)),@"gimbal_pitch_deg":@(_gimbal),@"battery_pct":@(_battery),@"status":status,@"home_latitude":@(_home.lat),@"home_longitude":@(_home.lon)}];
-        [self publish];
+        if(self.updated) self.updated([NSString stringWithFormat:@"%@ • %@\nBattery %.0f%% • Alt %.1f m • Heading %.0f°\nGPS %@ • Ground anchor %@ • %@",_mock?@"MOCK":self.aircraft?@"Mavic Air 2":@"No aircraft",self.client.connected?@"Server online":@"Server offline",_battery,_pose.altitude,_pose.heading,_gps?@"OK":@"waiting",_homeSet?@"OK":@"waiting",_returning?@"DJI RETURNING":_flightEnabled?@"FLIGHT ENABLED":_armed?@"CAMERA ONLY":@"DISARMED"]);
+        if(self.stateUpdated) self.stateUpdated([self telemetry]);
     }
     if(now-_lastFrame>=1 && self.client.connected) { _lastFrame=now; [self frame]; }
 }
