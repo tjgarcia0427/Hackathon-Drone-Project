@@ -246,7 +246,7 @@ class Controller:
             raise HTTPException(409, "Action budget reached; hold, return home or stop")
         if action == "request_takeoff":
             # The iPhone boxes these gates as NSNumber ints (1/0), not JSON booleans.
-        if control.get("takeoff_request_supported") not in (True, 1) or control.get("takeoff_ready") not in (True, 1):
+            if control.get("takeoff_request_supported") not in (True, 1) or control.get("takeoff_ready") not in (True, 1):
                 raise HTTPException(409, control.get("takeoff_problem") or "Phone is not ready for pilot takeoff")
             return "request_takeoff", {}, 65, observation
         if action == "report_candidate":
