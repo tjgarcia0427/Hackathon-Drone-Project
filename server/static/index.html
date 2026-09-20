@@ -3,122 +3,285 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rescue Command Center</title>
+<title>Guardian Angel — Command center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800&family=Roboto+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
 <style>
-  :root { --bg:#0b0f14; --panel:#131a22; --line:#22303d; --txt:#e6edf3; --dim:#8b98a5; --ok:#2ecc71; --warn:#f39c12; --bad:#e74c3c; --acc:#4ea1ff; }
+  :root {
+    --navy:#162E51; --primary:#1A4480; --primary-press:#162E51;
+    --ink:#1B1B1B; --secondary:#565C65; --muted:#71767A; --disabled:#A9AEB1;
+    --border:#DFE1E2; --divider:#F0F0F0; --page:#F0F0F0; --card:#FFFFFF;
+    --stop:#B50909; --stop-press:#8B0A03; --error:#D83933; --error-tint:#FDF2F2;
+    --caution:#FFBE2E; --caution-dark:#E5A000;
+    --ok:#00A91C; --approved:#4D8055; --found:#008817; --info-tint:#EFF6FB;
+    --sans:'Public Sans',system-ui,-apple-system,sans-serif; --mono:'Roboto Mono',ui-monospace,Menlo,monospace;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--txt); font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif; }
-  header { display:flex; align-items:center; gap:16px; padding:14px 20px; border-bottom:1px solid var(--line); }
-  header h1 { font-size:18px; margin:0; letter-spacing:.3px; }
-  .phase { padding:4px 12px; border-radius:999px; font-weight:600; background:var(--line); text-transform:uppercase; font-size:12px; }
-  .phase.found { background:var(--ok); color:#000; }
-  .phase.searching, .phase.dispatched { background:var(--warn); color:#000; }
-  .phase.aborted { background:var(--bad); }
-  main { display:grid; grid-template-columns: 1.2fr 1fr; gap:16px; padding:16px 20px; }
-  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
-  .panel h2 { margin:0 0 10px; font-size:13px; color:var(--dim); text-transform:uppercase; letter-spacing:.6px; }
-  .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-family:ui-monospace,Menlo,monospace; font-size:13px; }
-  .kv span:first-child { color:var(--dim); }
-  img#cam { width:100%; border-radius:8px; background:#000; aspect-ratio:16/9; object-fit:cover; }
-  #log { font-family:ui-monospace,Menlo,monospace; font-size:12px; max-height:340px; overflow:auto; white-space:pre-wrap; }
-  #log div { padding:2px 0; border-bottom:1px dashed var(--line); }
-  .btn { background:var(--acc); color:#000; border:0; border-radius:8px; padding:10px 16px; font-weight:700; cursor:pointer; margin-right:8px; }
-  .btn.danger { background:var(--bad); color:#fff; }
-  .btn.ghost { background:transparent; color:var(--dim); border:1px solid var(--line); }
-  .found-banner { display:none; background:var(--ok); color:#000; padding:14px; border-radius:10px; font-weight:800; font-size:18px; margin-bottom:12px; }
-  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--bad); margin-right:6px; }
+  body { margin:0; background:var(--page); color:var(--ink); font:400 14px/20px var(--sans); }
+  .mono { font-family:var(--mono); }
+
+  /* Header */
+  header { background:var(--navy); display:flex; align-items:center; gap:24px; padding:14px 28px; }
+  .eyebrow { font:600 11px/14px var(--sans); letter-spacing:1px; text-transform:uppercase; color:var(--disabled); }
+  header h1 { margin:0; font:800 20px/26px var(--sans); color:#fff; }
+  .phase { display:inline-flex; align-items:center; gap:8px; padding:6px 12px; border-radius:4px; font:800 12px/16px var(--sans); letter-spacing:.8px; text-transform:uppercase; background:var(--border); color:var(--ink); white-space:nowrap; }
+  .phase i { font-size:14px; }
+  .phase.planned, .phase.planning { background:var(--primary); color:#fff; }
+  .phase.dispatched, .phase.searching { background:var(--caution-dark); color:var(--ink); }
+  .phase.found { background:var(--found); color:#fff; }
+  .phase.aborted { background:var(--stop); color:#fff; }
+  .hdr-right { margin-left:auto; display:flex; align-items:center; gap:28px; font:400 12px/16px var(--mono); color:var(--border); white-space:nowrap; }
+  .hdr-right > div { display:flex; align-items:center; gap:8px; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--stop); flex-shrink:0; }
   .dot.on { background:var(--ok); }
-  select, input { max-width:100%; background:var(--bg); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:8px; }
-  .ai-form { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-  .ai-field { display:flex; align-items:center; gap:8px; max-width:100%; }
-  button:disabled, select:disabled, input:disabled { opacity:.5; cursor:not-allowed; }
-  #ai-status { margin:8px 0 0; color:var(--dim); }
-  .watch-alert { border-left:3px solid var(--warn); padding:8px 10px; margin:10px 0; overflow-wrap:anywhere; }
-  .watch-alert.test { border-color:var(--acc); }
-  .watch-alert p { margin:4px 0; }
-  .watch-alert a { color:var(--acc); }
-  @media(max-width:760px) { main { grid-template-columns:1fr; } header { flex-wrap:wrap; } }
+
+  /* Found banner */
+  .found-banner { display:none; background:var(--found); color:#fff; padding:12px 28px; align-items:center; gap:14px; }
+  .found-banner.show { display:flex; }
+  .found-banner i { font-size:24px; }
+  .found-banner .lbl { font:800 15px/20px var(--sans); letter-spacing:.6px; text-transform:uppercase; white-space:nowrap; }
+  .found-banner .det { font:400 13px/18px var(--mono); opacity:.95; white-space:nowrap; }
+  .found-banner .note { margin-left:auto; font:400 11px/14px var(--sans); opacity:.9; max-width:220px; text-align:right; }
+
+  /* Grid + panels */
+  main { display:grid; grid-template-columns:1.35fr 1fr; gap:16px; padding:16px 28px 28px; }
+  main > section { display:flex; flex-direction:column; gap:16px; min-width:0; }
+  .panel { background:var(--card); border:1px solid var(--border); border-radius:4px; }
+  .panel > h2 { margin:0; padding:8px 14px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; font:700 11px/14px var(--sans); letter-spacing:1px; text-transform:uppercase; color:var(--secondary); }
+  .panel > h2 .meta { font:400 11px/14px var(--mono); letter-spacing:0; text-transform:none; }
+  .panel .body { padding:12px 14px; }
+
+  /* Camera */
+  .cam-wrap { margin:12px; aspect-ratio:16/9; background:#000; position:relative; overflow:hidden; border-radius:2px; }
+  img#cam { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
+  #bbox { position:absolute; border:2px solid var(--ok); display:none; }
+  #bboxlbl { position:absolute; background:var(--ok); color:#fff; font:400 11px/14px var(--mono); padding:3px 8px; display:none; white-space:nowrap; }
+  .cam-strip { position:absolute; left:0; right:0; bottom:0; padding:8px 12px; display:flex; justify-content:space-between; font:400 11px/14px var(--mono); color:#fff; background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.6)); }
+  #det { padding:0 14px 12px; font:400 12px/16px var(--mono); color:var(--secondary); }
+
+  /* Buttons */
+  .btn { height:44px; padding:0 20px; border-radius:4px; border:0; font:700 15px/20px var(--sans); color:#fff; background:var(--primary); cursor:pointer; display:inline-flex; align-items:center; gap:8px; white-space:nowrap; }
+  .btn:hover { background:var(--primary-press); }
+  .btn.danger { background:var(--stop); }
+  .btn.danger:hover { background:var(--stop-press); }
+  .btn.outline { background:transparent; color:var(--ink); border:2px solid var(--secondary); }
+  .btn.outline:hover { background:var(--divider); }
+  .btn.text { background:transparent; color:var(--primary); padding:0 16px; font-size:14px; }
+  .btn.text:hover { background:var(--info-tint); }
+  .btn.sm { height:40px; font-size:14px; padding:0 16px; }
+  .btn:disabled, .btn:disabled:hover { background:var(--disabled); color:#fff; border-color:var(--disabled); cursor:default; }
+  .tag { font:400 10px/12px var(--sans); letter-spacing:.8px; padding:2px 6px; border:1px solid var(--disabled); border-radius:2px; color:var(--secondary); }
+  .controls { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .controls .spacer { margin-left:auto; }
+
+  /* Log */
+  #log { max-height:340px; overflow:auto; }
+  #log div, .row { display:flex; gap:14px; padding:7px 14px; border-bottom:1px solid var(--divider); font:400 12.5px/18px var(--mono); }
+  #log div span:first-child { color:var(--muted); flex-shrink:0; }
+  #log div span:last-child { overflow-wrap:anywhere; }
+
+  /* Key/value rows */
+  .kv .row { justify-content:space-between; padding:8px 14px; font:400 13px/18px var(--sans); }
+  .kv .row span:first-child { color:var(--secondary); }
+  .kv .row span:last-child { font-family:var(--mono); text-align:right; overflow-wrap:anywhere; }
+  .kv .row.ok span:last-child { color:var(--approved); }
+  .kv .row.bad span:last-child { color:var(--stop); }
+  .kv .note { padding:8px 14px; font:400 12px/16px var(--sans); color:var(--secondary); border-bottom:1px solid var(--divider); }
+  .verdict { display:flex; align-items:center; gap:6px; letter-spacing:0; text-transform:none; font:700 11px/14px var(--sans); }
+  .verdict.ok { color:var(--approved); }
+  .verdict.bad { color:var(--stop); }
+
+  /* Telemetry grid */
+  .tele { display:grid; grid-template-columns:repeat(3,1fr); }
+  .tele .cell { padding:10px 14px; border-right:1px solid var(--border); border-bottom:1px solid var(--border); }
+  .tele .cell:nth-child(3n) { border-right:0; }
+  .tele .cell:nth-child(n+4) { border-bottom:0; }
+  .tele .lbl { font:400 10px/12px var(--sans); letter-spacing:.8px; text-transform:uppercase; color:var(--secondary); }
+  .tele .val { font:500 18px/24px var(--mono); margin-top:2px; }
+  .tele .val.bad { color:var(--stop); }
+  .tele .val.small { font-size:14px; }
+
+  /* AI provider */
+  .ai-form { display:grid; grid-template-columns:1fr 1fr auto; gap:8px; align-items:end; }
+  .ai-field label { display:block; font:700 12px/16px var(--sans); margin-bottom:4px; }
+  select, input { width:100%; height:40px; background:#fff; color:var(--ink); border:1px solid var(--secondary); border-radius:2px; padding:0 10px; font:400 14px/20px var(--sans); }
+  input#ai-model { font:400 13px/20px var(--mono); }
+  select:disabled, input:disabled { background:var(--divider); color:var(--secondary); }
+  #ai-status, .help { margin:8px 0 0; font:400 12px/16px var(--sans); color:var(--secondary); }
+
+  /* Watch alerts */
+  #watch-alerts { padding:0; }
+  #watch-alerts.empty { padding:12px 14px; font-size:13px; color:var(--secondary); }
+  .watch-alert { padding:10px 14px; border-bottom:1px solid var(--divider); border-left:4px solid var(--caution-dark); overflow-wrap:anywhere; }
+  .watch-alert.test { border-left-color:var(--primary); }
+  .watch-alert strong { font:700 12px/16px var(--sans); letter-spacing:.6px; text-transform:uppercase; }
+  .watch-alert p { margin:4px 0 0; font-size:13px; }
+  .watch-alert .t { font-family:var(--mono); font-size:12px; color:var(--muted); }
+  .watch-alert a { color:var(--primary); font-family:var(--mono); font-size:13px; }
+
+  @media(max-width:760px) {
+    main { grid-template-columns:1fr; padding:16px; }
+    header { flex-wrap:wrap; gap:12px; padding:12px 16px; }
+    .hdr-right { margin-left:0; gap:16px; flex-wrap:wrap; }
+    .found-banner { flex-wrap:wrap; padding:12px 16px; }
+    .found-banner .note { margin-left:0; }
+    .ai-form { grid-template-columns:1fr; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>🚁 Rescue Command Center</h1>
-  <span id="phase" class="phase">idle</span>
-  <span style="margin-left:auto"><span id="dronedot" class="dot"></span><span id="dronetxt">no drone</span></span>
+  <div>
+    <div class="eyebrow">Guardian Angel · Incident response</div>
+    <h1>Command center</h1>
+  </div>
+  <span id="phase" class="phase"><i id="phaseicon" class="ph-bold ph-pause"></i><span id="phasetxt">idle</span></span>
+  <div class="hdr-right">
+    <div><span id="dronedot" class="dot"></span><span id="dronetxt">NO BRIDGE</span></div>
+    <div><span id="aidot" class="dot"></span><span id="aitxt">AI —</span></div>
+    <div id="clock">--:--:--</div>
+  </div>
 </header>
+<div id="foundBanner" class="found-banner">
+  <i class="ph-fill ph-person-simple"></i>
+  <span class="lbl">Subject candidate located — human review required</span>
+  <span class="det" id="foundDet"></span>
+  <span class="note">Coordinates are the aircraft's position, not the person's.</span>
+</div>
 <main>
   <section>
-    <div id="foundBanner" class="found-banner"></div>
-    <div class="panel" style="margin-bottom:16px">
-      <h2>Watch help alerts</h2>
-      <button id="watch-sound" class="btn ghost" onclick="enableAlertSound()">Enable alert sound</button>
-      <p style="color:var(--dim)">Alerts appear here immediately. Test alerts never create a mission. Review location and plan before dispatch.</p>
-      <div id="watch-alerts" aria-live="polite">No Watch alerts received.</div>
+    <div class="panel">
+      <h2><span>Live camera · Mavic Air 2</span><span class="meta" id="cammeta">no frames yet</span></h2>
+      <div class="cam-wrap">
+        <img id="cam" src="" alt="waiting for frames">
+        <div id="bbox"></div><div id="bboxlbl"></div>
+        <div class="cam-strip"><span id="camhud">ALT — · HDG — · —</span><span id="camtime"></span></div>
+      </div>
+      <div id="det">detector: —</div>
     </div>
     <div class="panel">
-      <h2>Live camera</h2>
-      <img id="cam" src="" alt="waiting for frames">
-      <div id="det" style="margin-top:6px;color:var(--dim)">detector: —</div>
+      <div class="body controls">
+        <button class="btn" onclick="post('/dispatch')">Dispatch drone</button>
+        <button class="btn danger" onclick="post('/abort')"><i class="ph-fill ph-hand-palm"></i>Abort · return home</button>
+        <button class="btn outline" onclick="post('/reset')">Reset</button>
+        <span class="spacer"></span>
+        <button class="btn text" onclick="simulateFall()">Simulate fall <span class="tag">DEV</span></button>
+      </div>
     </div>
-    <div class="panel" style="margin-top:16px">
-      <h2>Controls</h2>
-      <button class="btn" onclick="post('/dispatch')">Dispatch drone</button>
-      <button class="btn danger" onclick="post('/abort')">Abort / RTL</button>
-      <button class="btn ghost" onclick="post('/reset')">Reset</button>
-      <button class="btn ghost" onclick="simulateFall()">Simulate fall (dev)</button>
+    <div class="panel">
+      <h2><span>Watch help alerts</span><button id="watch-sound" class="btn text sm" style="height:28px;padding:0 8px;font-size:12px" onclick="enableAlertSound()">Enable alert sound</button></h2>
+      <div id="watch-alerts" class="empty" aria-live="polite">No Watch alerts received.</div>
+      <p class="help" style="padding:0 14px 12px;margin:0">Test alerts never create a mission. Review location and plan before dispatch.</p>
+    </div>
+    <div class="panel">
+      <h2><span>Event log</span></h2>
+      <div id="log"></div>
     </div>
   </section>
   <section>
-    <div class="panel" style="margin-bottom:16px">
-      <h2>AI provider</h2>
-      <div class="ai-form">
-        <div class="ai-field"><label for="ai-provider">Use</label>
-        <select id="ai-provider" onchange="providerChanged()"></select>
-        </div><div class="ai-field"><label for="ai-model">Model</label>
-        <input id="ai-model" placeholder="Provider default" maxlength="120"></div>
-        <button id="ai-apply" class="btn" onclick="applyAI()">Apply</button>
-      </div>
-      <p id="ai-status" role="status">Loading AI configuration…</p>
-      <p style="color:var(--dim)">Sign in to Codex or Claude Code on the server computer. API keys stay in the server environment. Reset before switching providers.</p>
+    <div class="panel">
+      <h2><span>Incident</span><span class="meta" id="incmeta">—</span></h2>
+      <div id="incident" class="kv"></div>
     </div>
     <div class="panel">
-      <h2>Incident</h2>
-      <div id="incident" class="kv"><span>—</span><span></span></div>
+      <h2><span>Mission plan · AI → safety layer</span><span id="planverdict" class="verdict"></span></h2>
+      <div id="plan" class="kv"></div>
     </div>
-    <div class="panel" style="margin-top:16px">
-      <h2>Mission plan (AI → safety layer)</h2>
-      <div id="plan" class="kv"><span>—</span><span></span></div>
+    <div class="panel">
+      <h2><span>Aircraft telemetry</span><span class="meta" id="dronemeta"></span></h2>
+      <div id="drone" class="tele"></div>
     </div>
-    <div class="panel" style="margin-top:16px">
-      <h2>Drone</h2>
-      <div id="drone" class="kv"><span>—</span><span></span></div>
-    </div>
-    <div class="panel" style="margin-top:16px">
-      <h2>Log</h2>
-      <div id="log"></div>
+    <div class="panel">
+      <h2><span>AI provider</span></h2>
+      <div class="body">
+        <div class="ai-form">
+          <div class="ai-field"><label for="ai-provider">Use</label>
+            <select id="ai-provider" onchange="providerChanged()"></select></div>
+          <div class="ai-field"><label for="ai-model">Model</label>
+            <input id="ai-model" placeholder="Provider default" maxlength="120"></div>
+          <button id="ai-apply" class="btn sm" onclick="applyAI()">Apply</button>
+        </div>
+        <p id="ai-status" role="status">Loading AI configuration…</p>
+        <p class="help">Sign in to Codex or Claude Code on the server computer. API keys remain in the server environment. Reset before switching providers.</p>
+      </div>
     </div>
   </section>
 </main>
 <script>
 const $ = id => document.getElementById(id);
 const escapeHTML = v => String(v ?? "").replace(/[&<>"\']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","\'":"&#39;"}[c]));
-const kv = (el, obj) => { el.innerHTML = obj ? Object.entries(obj).map(([k,v]) => `<span>${escapeHTML(k)}</span><span>${escapeHTML(typeof v==='number'? +v.toFixed(6) : v)}</span>`).join('') : '<span>—</span><span></span>'; };
+const fmtVal = v => typeof v==='number' ? +v.toFixed(6) : v;
+const kv = (el, obj) => { el.innerHTML = obj ? Object.entries(obj).map(([k,v]) => `<div class="row"><span>${escapeHTML(k)}</span><span>${escapeHTML(fmtVal(v))}</span></div>`).join('') : '<div class="row"><span>—</span><span></span></div>'; };
+const PHASE_ICON = { idle:'ph-pause', planned:'ph-list-checks', planning:'ph-list-checks', dispatched:'ph-paper-plane-tilt', searching:'ph-radar', found:'ph-person-simple', aborted:'ph-hand-palm' };
+let lastFrameAt = 0, frameTimes = [], lastDrone = null;
+
+function tele(el, d) {
+  if (!d) { el.innerHTML = '<div class="row"><span>—</span><span></span></div>'; return; }
+  lastDrone = d;
+  const bat = Number(d.battery_pct);
+  const cells = [
+    ['Battery', Number.isFinite(bat) ? bat.toFixed(0)+'%' : '—', bat < 30 ? 'bad' : ''],
+    ['Altitude', fmt1(d.altitude_m)+' m'],
+    ['Heading', fmt1(d.heading_deg, 0)+'°'],
+    ['Gimbal', fmt1(d.gimbal_pitch_deg, 0)+'°'],
+    ['Status', String(d.status || '—')],
+    ['Position', fmt1(d.latitude,4)+', '+fmt1(d.longitude,4), 'small'],
+  ];
+  el.innerHTML = cells.map(([l,v,c]) => `<div class="cell"><div class="lbl">${escapeHTML(l)}</div><div class="val ${c||''}">${escapeHTML(v)}</div></div>`).join('');
+  $('dronemeta').textContent = d.drone_id ? String(d.drone_id) : '';
+  $('camhud').textContent = `ALT ${fmt1(d.altitude_m)} m · HDG ${fmt1(d.heading_deg,0)}° · ${fmtLL(d.latitude, d.longitude)}`;
+}
+const fmt1 = (n, p=1) => Number.isFinite(Number(n)) ? Number(n).toFixed(p) : '—';
+const fmtLL = (la, lo) => (Number.isFinite(la) && Number.isFinite(lo)) ? `${Math.abs(la).toFixed(4)} ${la<0?'S':'N'}  ${Math.abs(lo).toFixed(4)} ${lo<0?'W':'E'}` : '—';
+
 function render(s) {
   renderAI(s);
   renderWatchAlerts(s.watch_alerts || []);
-  $('phase').textContent = s.phase; $('phase').className = 'phase ' + s.phase;
+  const phase = s.planning && s.phase==='idle' ? 'planning' : s.phase;
+  $('phasetxt').textContent = phase; $('phase').className = 'phase ' + phase;
+  $('phaseicon').className = 'ph-bold ' + (PHASE_ICON[phase] || 'ph-circle');
   $('dronedot').className = 'dot' + (s.drone_connected ? ' on' : '');
-  $('dronetxt').textContent = s.drone_connected ? (s.drone?.drone_id || 'drone') + ' connected' : 'no drone';
-  kv($('incident'), s.incident);
-  kv($('plan'), s.plan ? {...s.plan, safety: s.plan_ok ? 'APPROVED' : 'REJECTED: ' + s.plan_reason} : null);
-  kv($('drone'), s.drone);
+  $('dronetxt').textContent = s.drone_connected ? 'BRIDGE ' + String(s.drone?.drone_id || 'DRONE').toUpperCase() + ' CONNECTED' : 'NO BRIDGE';
+  const inc = s.incident;
+  $('incmeta').textContent = inc ? (inc.event || '—') + ' · ' + (inc.source || '—') : '—';
+  kv($('incident'), inc ? {latitude:inc.latitude, longitude:inc.longitude, accuracy:inc.accuracy+' m', timestamp:inc.timestamp || '—'} : null);
+  kv($('plan'), s.plan ? {'target': fmtLL(s.plan.target_lat, s.plan.target_lng), 'altitude': s.plan.altitude_m+' m', 'search radius': s.plan.search_radius_m+' m', 'pattern': String(s.plan.pattern).replace('_',' '), 'gimbal': s.plan.gimbal_pitch_deg+'°'} : null);
+  if (s.plan && s.plan.rationale) $('plan').insertAdjacentHTML('beforeend', `<div class="note">${escapeHTML(s.plan.rationale)}</div>`);
+  const v = $('planverdict');
+  if (s.plan) { const ok = !!s.plan_ok; v.className = 'verdict ' + (ok ? 'ok' : 'bad'); v.innerHTML = ok ? '<i class="ph-bold ph-check-circle"></i>Approved' : '<i class="ph-bold ph-x-circle"></i>Rejected: ' + escapeHTML(s.plan_reason || ''); }
+  else { v.className = 'verdict'; v.textContent = ''; }
+  tele($('drone'), s.drone);
   $('log').innerHTML = (s.log || []).map(fmtLog).join('');
   $('log').scrollTop = 1e9;
-  if (s.found) { $('foundBanner').style.display='block';
-    $('foundBanner').textContent = `SUBJECT LOCATED — ${s.found.distance_from_report_m} m from reported fall · confidence ${(s.found.confidence*100).toFixed(0)}% · drone holding`; }
-  else $('foundBanner').style.display='none';
+  if (s.found) { $('foundBanner').classList.add('show');
+    $('foundDet').textContent = `${s.found.distance_from_report_m} m from reported fall · confidence ${(s.found.confidence*100).toFixed(0)}% · aircraft holding`; }
+  else $('foundBanner').classList.remove('show');
 }
-const fmtLog = e => `<div>${new Date(e.t*1000).toLocaleTimeString()}  ${escapeHTML(e.msg)}</div>`;
+const fmtLog = e => `<div><span>${new Date(e.t*1000).toLocaleTimeString([], {hour12:false})}</span><span>${escapeHTML(e.msg)}</span></div>`;
+
+function drawDetection(det) {
+  const box = $('bbox'), lbl = $('bboxlbl'), img = $('cam');
+  if (!det || !det.person || !Array.isArray(det.bbox) || det.bbox.length < 4 || !img.naturalWidth) { box.style.display = lbl.style.display = 'none'; return; }
+  const [x, y, w, h] = det.bbox, W = img.naturalWidth, H = img.naturalHeight;
+  box.style.left = (x/W*100)+'%'; box.style.top = (y/H*100)+'%'; box.style.width = (w/W*100)+'%'; box.style.height = (h/H*100)+'%';
+  lbl.style.left = (x/W*100)+'%'; lbl.style.top = `calc(${y/H*100}% - 20px)`;
+  lbl.textContent = `PERSON ${(det.confidence*100).toFixed(0)}%`;
+  box.style.display = lbl.style.display = 'block';
+}
+function tickClock() {
+  const now = new Date();
+  $('clock').textContent = now.toLocaleTimeString([], {hour12:false}) + ' ' + (now.toLocaleTimeString([], {timeZoneName:'short'}).split(' ').pop() || '');
+  if (lastFrameAt) {
+    const age = (Date.now() - lastFrameAt)/1000;
+    frameTimes = frameTimes.filter(t => Date.now() - t < 5000);
+    const fps = frameTimes.length > 1 ? (frameTimes.length-1) / ((frameTimes[frameTimes.length-1]-frameTimes[0])/1000) : 0;
+    $('cammeta').textContent = `frame ${age.toFixed(1)} s ago · ${fps ? fps.toFixed(0) : '—'} fps`;
+  }
+}
+setInterval(tickClock, 500); tickClock();
+
 function connect() {
   const ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/dashboard');
   ws.onmessage = ev => {
@@ -126,9 +289,13 @@ function connect() {
     if (m.type==='state') render(m.state);
     else if (m.type==='watch_alert') receiveWatchAlert(m.alert);
     else if (m.type==='log') { $('log').insertAdjacentHTML('beforeend', fmtLog(m.entry)); $('log').scrollTop=1e9; }
-    else if (m.type==='telemetry') kv($('drone'), m.drone);
-    else if (m.type==='frame') { $('cam').src = '/frame.jpg?t=' + Date.now();
-      $('det').textContent = 'detector: ' + (m.detection ? (m.detection.person ? `PERSON ${(m.detection.confidence*100).toFixed(0)}% ${JSON.stringify(m.detection.bbox)}` : 'no person') : 'not installed (visual AI only)'); }
+    else if (m.type==='telemetry') tele($('drone'), m.drone);
+    else if (m.type==='frame') {
+      const img = $('cam'); lastFrameAt = Date.now(); frameTimes.push(lastFrameAt);
+      $('camtime').textContent = new Date().toLocaleTimeString([], {hour12:false});
+      img.onload = () => drawDetection(m.detection);
+      img.src = '/frame.jpg?t=' + Date.now();
+      $('det').textContent = 'detector: ' + (m.detection ? (m.detection.person ? `person ${(m.detection.confidence*100).toFixed(0)}% · bbox ${JSON.stringify(m.detection.bbox)}` : 'no person') : 'not installed (visual AI only)'); }
   };
   ws.onclose = () => setTimeout(connect, 1500);
 }
@@ -159,8 +326,8 @@ function renderWatchAlerts(alerts) {
     title.textContent=(a.test_mode?'TEST':'HELP')+' · '+(a.source==='watch_shake'?'Shake gesture':'Send Help button');
     const description=document.createElement('p');
     description.textContent=a.status+' — '+a.message;
-    const time=document.createElement('p');
-    time.textContent=new Date(a.received_at*1000).toLocaleTimeString();
+    const time=document.createElement('p'); time.className='t';
+    time.textContent=new Date(a.received_at*1000).toLocaleTimeString([], {hour12:false});
     row.append(title,description,time);
     if(Number.isFinite(a.latitude) && Number.isFinite(a.longitude) && Number.isFinite(a.accuracy)) {
       const link=document.createElement('a');
@@ -173,8 +340,9 @@ function renderWatchAlerts(alerts) {
     }
     return row;
   });
-  if(rows.length) $('watch-alerts').replaceChildren(...rows);
-  else $('watch-alerts').textContent='No Watch alerts received.';
+  const host=$('watch-alerts');
+  if(rows.length) { host.className=''; host.replaceChildren(...rows); }
+  else { host.className='empty'; host.textContent='No Watch alerts received.'; }
 }
 function receiveWatchAlert(alert) {
   // State snapshots/reconnects update the list silently; only a new event chirps.
@@ -202,7 +370,9 @@ function renderAI(s) {
   }
   const locked=s.phase!=='idle' || s.planning;
   for(const id of ['ai-provider','ai-model','ai-apply']) $(id).disabled=locked;
-  $('ai-status').textContent=s.ai.label+' · '+s.ai.effective_model+(s.ai.setup_error ? ' · '+s.ai.setup_error : ' · Configuration detected; live login/model check still required')+(locked?' · Reset and finish planning to change':'');
+  $('aidot').className='dot'+(s.ai.setup_error?'':' on');
+  $('aitxt').textContent='AI '+s.ai.label+' · '+s.ai.effective_model;
+  $('ai-status').textContent=s.ai.label+' · '+s.ai.effective_model+(s.ai.setup_error ? ' · '+s.ai.setup_error : ' · Configuration detected; live login/model check still required')+(locked?' · Locked while a mission is active. Reset and finish planning to change.':'');
 }
 function providerChanged() { $('ai-model').value=''; const option=aiOptions.find(o=>o.provider===$('ai-provider').value); $('ai-model').placeholder=option?.default_model || ($('ai-provider').value.endsWith('_api')?'Enter your API model ID':'CLI default'); }
 async function applyAI() {
