@@ -117,7 +117,7 @@ For remote teammates, use a private authenticated VPN or run the server beside t
 ## Hardware sequence
 
 1. Initially remove propellers. Close DJI Fly, turn **Mock hardware off before Start bridge**, and connect aircraft, controller and iPhone. The first DJI registration requires internet access.
-2. Verify registration, correct aircraft model, battery updates, and live preview. Enable **Camera only** and test a gimbal command through your server. The full existing mission begins with `goto`, so it will correctly fail while camera-only control is enabled; use a targeted gimbal test for this milestone.
+2. Verify registration, correct aircraft model, battery updates, and live preview. Tap **Arm camera only** and test a gimbal command through your server. The full existing mission begins with `goto`, so it will correctly fail while camera-only control is enabled; use a targeted gimbal test for this milestone.
 3. For flight testing, the pilot configures/checks normal aircraft failsafes and RTH height in DJI Fly beforehand, then closes DJI Fly. Start the bridge on the ground in an open outdoor area and wait for **GPS OK / Ground anchor OK**. Keep the app open and connected.
 4. The pilot manually starts and flies the aircraft using the controller, following the aircraft's normal manual procedure, and positions it at 5–30 m altitude near the launch point. There is intentionally no remote takeoff action in the app. Avoid switching to DJI Fly after recording the ground anchor; connection changes can invalidate it.
 5. Tap **STOP AI** if camera-only mode was previously enabled, then **Enable flight** locally. Confirm the on-screen state. Test a small yaw, hold, then a short move with a clear flight path before attempting a server mission.
