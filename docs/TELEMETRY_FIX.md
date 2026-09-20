@@ -30,7 +30,7 @@ Regression coverage checks grounded zero altitude, weak/missing GPS, independent
 
 The `Aircraft telemetry checks` workflow runs Foundation observation tests, navigation tests, dashboard JavaScript tests, preservation checks, and an unsigned production DJI build on `main`. The existing iPhone UI workflow builds `ui-redesign` and exercises an additional GPS-waiting/zero-altitude screen. Existing Watch/server CI runs the Python regression suite. Automated checks do not replace a real SDK/hardware test; Windows cannot run Xcode or measure the team's aircraft telemetry timing.
 
-The original video fixes (OcuSync decoding-assist delegate, encoder selection, software decode ) are retained. The later [review update](REVIEW_FIXES_2026-09-20.md) removes only the repetitive feed-byte diagnostic at the user's request. No AI provider, camera upload rate or flight limit was changed. Teammates should keep the functional patch on both branches when merging later.
+The original video fixes (OcuSync decoding-assist delegate, encoder selection, software decode) are retained. The later [review update](REVIEW_FIXES_2026-09-20.md) removes only the repetitive feed-byte diagnostic at the user's request. No AI provider, camera upload rate or flight limit was changed. Teammates should keep the functional patch on both branches when merging later.
 
 ### Completed automated validation
 

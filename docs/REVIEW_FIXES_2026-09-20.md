@@ -47,3 +47,10 @@ python start_demo.py --provider codex
 Use `--model YOUR_MODEL_ID` on both commands when choosing a specific model. For API use, select `openai_api` or `anthropic_api` and supply the model explicitly. Keep credentials outside Git. Restart the server and hard-refresh the dashboard for the new stats/evidence UI. Rebuild the iPhone to remove byte logs; rebuild the Watch app for the cooldown fix.
 
 **Merge handoff:** `ui-redesign` still lacks `main`'s subject-disambiguation models, geometry and multi-candidate evidence endpoint/UI. Reconcile those features and the redesigned markup deliberately after the team's physical regression; do not choose one entire `index.html` and discard the other features. Both branches have the new stats, log removal, Watch cooldown, history feedback and explicit API model setup. This update does not merge branches or change DJI firmware.
+
+### CI results
+
+- Main: [Watch build/core tests and 74 server tests passed](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35522722396); [production iPhone build, navigation/preservation and dashboard checks passed](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35522722399).
+- UI branch: [production iPhone build and 14 UIKit scenarios passed](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35522749041); [44 server tests on Python 3.9 and telemetry/dashboard checks passed](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35522748926).
+- Native source is unchanged by the final dashboard-only formatting follow-up: DJI's no-GPS enum displays “No signal”, not “6 / 5”. The updated panel and production dashboard JavaScript tests pass locally.
+
