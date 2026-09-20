@@ -350,7 +350,7 @@ static UIView *NavyHeader(UIView *content) {
     [stack addArrangedSubview:[self buildTelemetry]];
     [stack addArrangedSubview:[self buildProcedure]];
     [stack addArrangedSubview:[self buildLog]];
-    UILabel *foot=Label(@"Pilot takeoff required: use Take off here, or authorize one agent launch. Keep this app in the foreground. STOP requests takeoff cancellation or releases AI flight control; DJI return-to-home and motor control remain with the aircraft and the pilot's RC. No obstacle or terrain avoidance is provided.",Sans(11,UIFontWeightRegular),GA_SECONDARY);
+    UILabel *foot=Label(@"Pilot authorization required: use Take off here, or authorize one agent launch. Keep this app in the foreground. STOP requests takeoff cancellation or releases AI flight control; DJI return-to-home and motor control remain with the aircraft and the pilot's RC. No obstacle or terrain avoidance is provided.",Sans(11,UIFontWeightRegular),GA_SECONDARY);
     [stack addArrangedSubview:foot];
     [scroll addSubview:stack];
 

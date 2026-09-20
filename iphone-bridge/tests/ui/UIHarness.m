@@ -154,6 +154,10 @@ static void Run(void) {
 @interface GAUISmoke : NSObject @end
 @implementation GAUISmoke
 + (void)load {
-    [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){ Later(^{ Run(); }); }];
+    // Foreground-only production prompts legitimately refuse while launch is still
+    // inactive. Start once after activation, not after an arbitrary launch delay.
+    [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){
+        static dispatch_once_t once; dispatch_once(&once,^{ Later(^{ Run(); }); });
+    }];
 }
 @end
