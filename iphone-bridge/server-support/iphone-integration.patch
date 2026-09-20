@@ -1,0 +1,226 @@
+--- a/server/app.py
++++ b/server/app.py
+@@ -91,16 +91,62 @@
+ 
+ # ---------- drone command channel ----------
+ 
++
++# Guardian Angel iPhone integration v1
++async def iphone_stop(reason: str) -> None:
++    """Release app flight control. Does not cancel DJI RTH or stop motors."""
++    ws = S.drone_ws
++    if ws is not None:
++        try:
++            await asyncio.wait_for(ws.send_text(json.dumps({
++                "type": "cmd", "cmd_id": uuid.uuid4().hex[:8], "action": "stop",
++            })), 2.0)
++        except Exception as exc:
++            log(f"stop delivery failed; pilot intervention required: {exc}")
++    log(f"AI control release requested: {reason}")
++
++
++async def iphone_cancel_mission() -> None:
++    task = S.search_task
++    if task and not task.done():
++        task.cancel()
++        try:
++            await task
++        except asyncio.CancelledError:
++            pass
++
++
++async def iphone_fresh_frame(after: float) -> float:
++    deadline = time.monotonic() + 5.0
++    while time.monotonic() < deadline:
++        received = getattr(S, "latest_frame_at", 0.0)
++        if received > after and time.monotonic() - received < 3.0:
++            return received
++        await asyncio.sleep(0.1)
++    raise RuntimeError("no fresh camera frame after the last action")
++
++
++def iphone_telemetry_ready() -> bool:
++    return S.drone is not None and time.monotonic() - getattr(S, "telemetry_at", 0.0) < 3.0
++
+ async def send_cmd(action: str, timeout: float = 25.0, **params: Any) -> dict:
+-    if S.drone_ws is None:
++    ws = S.drone_ws
++    if ws is None:
+         raise RuntimeError("no drone connected")
+     cmd_id = uuid.uuid4().hex[:8]
+-    fut: asyncio.Future = asyncio.get_event_loop().create_future()
++    fut = asyncio.get_running_loop().create_future()
+     S.pending_acks[cmd_id] = fut
+-    await S.drone_ws.send_text(json.dumps({"type": "cmd", "cmd_id": cmd_id, "action": action, **params}))
+-    log(f"→ drone {action} {params}", cmd_id=cmd_id)
+-    try:
++    try:
++        await asyncio.wait_for(ws.send_text(json.dumps({
++            "type": "cmd", "cmd_id": cmd_id, "action": action,
++            "expires_at_ms": int((time.time() + 5.0) * 1000), **params,
++        })), 3.0)
++        log(f"→ drone {action} {params}", cmd_id=cmd_id)
+         return await asyncio.wait_for(fut, timeout)
++    except Exception:
++        if action != "rtl":
++            await iphone_stop(f"{action} failed or timed out")
++        raise
+     finally:
+         S.pending_acks.pop(cmd_id, None)
+ 
+@@ -139,6 +185,10 @@
+         raise HTTPException(503, "no drone connected")
+     if S.search_task and not S.search_task.done():
+         raise HTTPException(409, "already dispatched")
++    if not iphone_telemetry_ready():
++        raise HTTPException(409, "fresh aircraft telemetry required")
++    if S.home is None or not (5 <= S.plan.altitude_m <= 30) or safety.haversine_m(*S.home, S.plan.target_lat, S.plan.target_lng) > 35:
++        raise HTTPException(400, "iPhone demo requires target within 35 m of launch and altitude 5..30 m")
+     S.phase = "dispatched"
+     S.search_task = asyncio.create_task(run_mission())
+     await push_state()
+@@ -147,27 +197,37 @@
+ 
+ @app.post("/abort")
+ async def abort() -> dict:
+-    if S.search_task and not S.search_task.done():
+-        S.search_task.cancel()
++    await iphone_cancel_mission()
+     S.phase = "aborted"
+     try:
+-        await send_cmd("rtl", timeout=5)
+-    except Exception as e:  # noqa: BLE001
+-        log(f"abort: rtl not acked ({e})")
++        # iPhone acknowledges actual landing, not just SDK acceptance.
++        await send_cmd("rtl", timeout=180)
++    except Exception as exc:
++        log(f"abort: return not completed ({exc}); pilot must intervene")
++        await push_state()
++        return {"ok": False, "error": str(exc)}
+     await push_state()
+     return {"ok": True}
+ 
+ 
+ @app.post("/frame")
+ async def frame(request: Request) -> dict:
+-    """Drone app POSTs raw JPEG bytes here ~1/s. Runs the local detector."""
++    """Publish a matched frame/detection pair, ordered by receive time."""
++    if S.drone_ws is None:
++        raise HTTPException(409, "no connected drone")
++    epoch = getattr(S, "frame_epoch", 0)
++    received = time.monotonic()
+     data = await request.body()
+-    if not data:
+-        raise HTTPException(400, "empty frame")
+-    S.latest_frame = data
+-    S.latest_detection = await asyncio.to_thread(detector.detect, data)
+-    await broadcast({"type": "frame", "detection": S.latest_detection})
+-    return {"ok": True, "detection": S.latest_detection}
++    if not data or len(data) > 2_000_000:
++        raise HTTPException(400, "expected JPEG under 2 MB")
++    detection = await asyncio.to_thread(detector.detect, data)
++    if S.drone_ws is None or epoch != getattr(S, "frame_epoch", 0):
++        raise HTTPException(409, "frame belongs to an old connection or reset")
++    if received > getattr(S, "latest_frame_at", 0.0):
++        S.latest_frame, S.latest_detection = data, detection
++        S.latest_frame_at = received
++        await broadcast({"type": "frame", "detection": detection})
++    return {"ok": True, "detection": detection}
+ 
+ 
+ @app.get("/frame.jpg")
+@@ -185,12 +245,15 @@
+ 
+ @app.post("/reset")
+ async def reset() -> dict:
+-    if S.search_task and not S.search_task.done():
+-        S.search_task.cancel()
++    S.frame_epoch = getattr(S, "frame_epoch", 0) + 1
++    await iphone_cancel_mission()
++    await iphone_stop("mission reset")
+     S.incident = S.plan = S.plan_verdict = S.found = None
+     S.history, S.phase = [], "idle"
+-    await push_state()
+-    return {"ok": True}
++    S.latest_frame = S.latest_detection = None
++    S.latest_frame_at = 0.0
++    await push_state()
++    return {"ok": True, "note": "AI control release requested; re-enable locally"}
+ 
+ 
+ # ---------- mission runner ----------
+@@ -205,13 +268,15 @@
+         await push_state()
+         home = S.home or (plan.target_lat, plan.target_lng)
+         for step_no in range(safety.LIMITS["max_search_steps"]):
+-            await asyncio.sleep(1.2)  # let a fresh frame land
+-            if S.drone is None:
++            frame_at = await iphone_fresh_frame(time.monotonic())
++            if not iphone_telemetry_ready():
+                 raise RuntimeError("lost telemetry")
+             step: SearchStep = await asyncio.to_thread(
+                 planner.next_search_step, S.drone, S.latest_frame, S.latest_detection,
+                 S.history, plan.target_lat, plan.target_lng,
+             )
++            if not iphone_telemetry_ready() or time.monotonic() - frame_at > 10.0:
++                raise RuntimeError("planner result based on stale frame/telemetry")
+             verdict = safety.check_step(step, S.drone, *home, step_no)
+             desc = f"step {step_no + 1}: {step.action} {step.model_dump(exclude_none=True, exclude={'action', 'observation'})} — {step.observation}"
+             S.history.append(desc)
+@@ -242,13 +307,14 @@
+                 await send_cmd("move", bearing=step.move_bearing_deg, dist=step.move_distance_m)
+         S.phase = "aborted"
+         log("search ended without a find — returning home")
+-        await send_cmd("rtl", timeout=5)
++        await send_cmd("rtl", timeout=180)
+     except asyncio.CancelledError:
+         log("mission cancelled")
+         raise
+     except Exception as e:  # noqa: BLE001
+         S.phase = "aborted"
+         log(f"mission error: {e}")
++        await iphone_stop("mission failed")
+     finally:
+         await push_state()
+ 
+@@ -258,6 +324,14 @@
+ @app.websocket("/ws/drone")
+ async def ws_drone(ws: WebSocket) -> None:
+     await ws.accept()
++    if S.drone_ws is not None:
++        await ws.close(code=1008, reason="one drone connection allowed")
++        return
++    S.frame_epoch = getattr(S, "frame_epoch", 0) + 1
++    S.drone = None
++    S.telemetry_at = 0.0
++    S.latest_frame = S.latest_detection = None
++    S.latest_frame_at = 0.0
+     S.drone_ws = ws
+     log("drone connected")
+     await push_state()
+@@ -266,9 +340,10 @@
+             msg = json.loads(await ws.receive_text())
+             t = msg.get("type")
+             if t == "telemetry":
++                S.telemetry_at = time.monotonic()
+                 S.drone = DroneState(**{k: v for k, v in msg.items() if k != "type"})
+                 if S.home is None:
+-                    S.home = (S.drone.latitude, S.drone.longitude)
++                    S.home = (float(msg.get("home_latitude", S.drone.latitude)), float(msg.get("home_longitude", S.drone.longitude)))
+                     log(f"home set {S.home[0]:.6f},{S.home[1]:.6f}")
+                 await broadcast({"type": "telemetry", "drone": S.drone.model_dump()})
+             elif t == "ack":
+@@ -283,7 +358,13 @@
+     except WebSocketDisconnect:
+         pass
+     finally:
++        await iphone_cancel_mission()
+         S.drone_ws = None
++        S.telemetry_at = 0.0
++        S.frame_epoch = getattr(S, "frame_epoch", 0) + 1
++        for fut in list(S.pending_acks.values()):
++            if not fut.done():
++                fut.set_exception(RuntimeError("drone disconnected"))
+         log("drone disconnected")
+         await push_state()
+ 
