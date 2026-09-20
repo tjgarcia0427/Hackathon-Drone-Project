@@ -100,7 +100,12 @@ S = State()
 def log(msg: str, **extra: Any) -> None:
     entry = {"t": time.time(), "msg": msg, **extra}
     S.log.append(entry)
-    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+    line = f"[{time.strftime('%H:%M:%S')}] {msg}"
+    try:
+        print(line, flush=True)
+    except UnicodeEncodeError:
+        # A Windows console's code page must not abort a mission on ✓/✗.
+        print(line.encode('ascii', errors='backslashreplace').decode('ascii'), flush=True)
     asyncio.get_event_loop().create_task(broadcast({"type": "log", "entry": entry}))
 
 
@@ -480,7 +485,8 @@ async def run_mission() -> None:
                 raise RuntimeError("planner result based on stale frame/telemetry")
             verdict = safety.check_step(step, S.drone, *home, step_no)
             desc = f"step {step_no + 1}: {step.action} {step.model_dump(exclude_none=True, exclude={'action', 'observation'})} — {step.observation}"
-            S.history.append(desc)
+            S.history.append(desc if verdict.ok else
+                             f"{desc} [REJECTED: {verdict.reason}. Do not repeat this decision; reassess the candidates or change the view within the allowed limits.]")
             log(("✓ " if verdict.ok else f"✗ ({verdict.reason}) ") + desc)
             await broadcast({"type": "step", "step": step.model_dump(), "ok": verdict.ok, "reason": verdict.reason})
             if not verdict.ok:

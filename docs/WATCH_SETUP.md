@@ -117,3 +117,8 @@ Run server tests with `python -m unittest discover -s server -p 'test_*.py' -v` 
 A simulator compile is not signed installation or physical validation. Verify on this SE: permissions, receipt over the venue network, outdoor GPS accuracy, deliberate motion thresholds (1.5 g trigger, 0.45 g reset, three peaks ≥0.25 s apart in two seconds), haptics, cancellation, app backgrounding and lost-response retry. Tune motion only after observing test-mode behavior on the real Watch. No physical Watch/aircraft test can be performed from the Windows development environment.
 
 Implementation reference: [Apple Core Motion](https://developer.apple.com/documentation/coremotion/cmmotionmanager), [one-shot Core Location](https://developer.apple.com/documentation/corelocation/cllocationmanager/requestlocation()), [Watch networking](https://developer.apple.com/documentation/technotes/tn3135-low-level-networking-on-watchos), [single-target Watch apps](https://developer.apple.com/documentation/watchos-apps/migrating-to-a-single-target-watchos-app). Apple's dedicated [fall-detection manager](https://developer.apple.com/documentation/coremotion/cmfalldetectionmanager) is a separate entitlement-gated capability and is not used here.
+
+
+### Cancel and immediately retry
+
+After rebuilding the Watch app with the September 20 review fix, cancelling before an alert POST releases the button and shake cooldown. Try Send Test Help → cancel → a new deliberate shake with shake detection enabled and the app active. A completed or unconfirmed delivery retains its cooldown and original retry ID; cancel cannot undo a delivered alert. See [review handoff](REVIEW_FIXES_2026-09-20.md).

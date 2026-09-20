@@ -39,7 +39,10 @@ jobs:
         with:
           node-version: '22'
       - name: Test dashboard freshness and zero altitude
-        run: node server/test_telemetry_display.js
+        run: |
+          node server/test_telemetry_display.js
+          node server/test_telemetry_panel.js
+          node server/test_dashboard.js
       # ui-redesign already builds the real DJI app in iphone-ui-checks.yml.
       - uses: ruby/setup-ruby@v1
         if: github.ref_name == 'main'

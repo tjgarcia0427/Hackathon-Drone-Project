@@ -12,6 +12,13 @@ path='iphone-bridge/ios/GuardianAngel/DroneBridge.m'
 baseline=Path(sys.argv[1]).read_text(encoding='utf-8') if len(sys.argv)>1 else subprocess.check_output(
     ['git','show',f'4ebcf22b1c09b9872ff9a4503dfccdfbbacacd99:{path}'],cwd=root).decode()
 current=(root/path).read_text(encoding='utf-8')
+# The user requested removal of these two diagnostic lines only. Keep the
+# decoder input, timing and OcuSync assist code in the byte-for-byte comparison.
+diagnostic = '    static NSUInteger feedBytes=0; static double feedLogged=0; feedBytes+=videoData.length;\n    if(_videoTime-feedLogged>5) { feedLogged=_videoTime; [self note:[NSString stringWithFormat:@"Video feed: %lu bytes so far, previewer status %d",(unsigned long)feedBytes,(int)[DJIVideoPreviewer instance].status.isRunning]]; }\n'
+assert diagnostic in baseline
+baseline=baseline.replace(diagnostic,'')
+assert 'Video feed:' not in current
+
 current=re.sub(r'\n// Read-only presentation snapshot\..*?\n}\n\n','',current,count=1,flags=re.S)
 current=current.replace('#import "TelemetryDisplay.h" // display-only observations\n','')
 current=current.replace('    GATelemetrySample _displaySample; // display-only observations\n','')

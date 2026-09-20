@@ -1,5 +1,7 @@
 # iPhone UI redesign — branch handoff
 
+**Review/merge follow-up:** both branches now share the stats panel, byte-log removal and Watch cancellation fix. `main` also has the newer multi-person schema, bounds checks and versioned decision-image UI. Those dashboard/server features still need deliberate reconciliation during a future merge; do not overwrite either side wholesale. See [review handoff](REVIEW_FIXES_2026-09-20.md).
+
 **Telemetry follow-up (September 20):** the functional telemetry fix is applied independently to `main` and this branch. Altitude/heading are now GPS-independent display observations, reporting is 5 Hz, and coordinates show six decimals. Flight/video preservation checks now allow the marked observation/reporting regions as well as the UI snapshot. See [TELEMETRY_FIX.md](TELEMETRY_FIX.md) for the implementation and regression handoff.
 
 Work on `ui-redesign`; do not merge into `main` until Lorenzo finishes the device regression. TJ explicitly authorized this branch on September 20. No pull request is required. The existing dashboard redesign on this branch belongs to Alfred and was preserved unchanged by this update.

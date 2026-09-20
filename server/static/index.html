@@ -130,6 +130,7 @@
     .ai-form { grid-template-columns:1fr; }
   }
 </style>
+<link rel="stylesheet" href="/static/telemetry-panel.css">
 </head>
 <body>
 <header>
@@ -151,6 +152,11 @@
   <span class="note">Coordinates are the aircraft's position, not the person's.</span>
 </div>
 <main>
+  <div class="aircraft-overview" aria-labelledby="aircraft-title">
+    <h2 id="aircraft-title">Aircraft stats <span id="telemetry-badge" class="telemetry-badge">Waiting for aircraft</span></h2>
+    <dl id="aircraft-stats" class="aircraft-stats"></dl>
+    <p class="aircraft-note">Altitude is relative to takeoff. Coordinates use decimal degrees. Missing or stale readings show —.</p>
+  </div>
   <section>
     <div class="panel">
       <h2><span>Live camera · Mavic Air 2</span><span class="meta" id="cammeta">no frames yet</span></h2>
@@ -190,10 +196,6 @@
       <div id="plan" class="kv"></div>
     </div>
     <div class="panel">
-      <h2><span>Aircraft telemetry</span><span class="meta" id="dronemeta"></span></h2>
-      <div id="drone" class="tele"></div>
-    </div>
-    <div class="panel">
       <h2><span>AI provider</span></h2>
       <div class="body">
         <div class="ai-form">
@@ -210,6 +212,7 @@
   </section>
 </main>
 <script src="/static/telemetry-display.js"></script>
+<script src="/static/telemetry-panel.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const escapeHTML = v => String(v ?? "").replace(/[&<>"\']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","\'":"&#39;"}[c]));
@@ -219,24 +222,12 @@ const PHASE_ICON = { idle:'ph-pause', planned:'ph-list-checks', planning:'ph-lis
 let lastFrameAt = 0, frameTimes = [], lastDrone = null;
 
 const telemetryDisplay = new AircraftTelemetryDisplay();
-function receiveTelemetry(message) { telemetryDisplay.update(message,performance.now()); tele($('drone'),telemetryDisplay.read(performance.now())); }
-setInterval(()=>tele($('drone'),telemetryDisplay.read(performance.now())),200);
+function receiveTelemetry(message) { telemetryDisplay.update(message,performance.now()); tele(telemetryDisplay.read(performance.now())); }
+setInterval(()=>tele(telemetryDisplay.read(performance.now())),200);
 
-function tele(el, d) {
-  if (!d) { el.innerHTML = '<div class="row"><span>—</span><span></span></div>'; $('camhud').textContent='Telemetry unavailable'; $('dronemeta').textContent=''; return; }
-  lastDrone = d;
-  const bat = d.battery_pct;
-  const cells = [
-    ['Battery', Number.isFinite(bat) ? bat.toFixed(0)+'%' : '—', bat < 30 ? 'bad' : ''],
-    ['Altitude · takeoff', fmt1(d.altitude_m)+' m'],
-    ['Heading', fmt1(d.heading_deg, 0)+'°'],
-    ['Gimbal', fmt1(d.gimbal_pitch_deg, 0)+'°'],
-    ['GPS / satellites', (d.gps_ok ? 'OK' : 'waiting')+' / '+fmt1(d.satellites,0)],
-    ['Position', fmt1(d.latitude,6)+', '+fmt1(d.longitude,6), 'small'],
-  ];
-  el.innerHTML = cells.map(([l,v,c]) => `<div class="cell"><div class="lbl">${escapeHTML(l)}</div><div class="val ${c||''}">${escapeHTML(v)}</div></div>`).join('');
-  $('dronemeta').textContent = d.drone_id ? String(d.drone_id) : '';
-  $('camhud').textContent = `ALT ${fmt1(d.altitude_m)} m · HDG ${fmt1(d.heading_deg,0)}° · ${fmtLL(d.latitude, d.longitude)}`;
+function tele(d) {
+  AircraftTelemetryPanel.render($('aircraft-stats'),$('telemetry-badge'),d);
+  $('camhud').textContent=d?`ALT ${fmt1(d.altitude_m)} m · HDG ${fmt1(d.heading_deg,0)}° · ${fmtLL(d.latitude,d.longitude)}`:'Telemetry unavailable';
 }
 const fmt1 = (n, p=1) => Number.isFinite(n) ? n.toFixed(p) : '—';
 const fmtLL = (la, lo) => (Number.isFinite(la) && Number.isFinite(lo)) ? `${Math.abs(la).toFixed(6)} ${la<0?'S':'N'}  ${Math.abs(lo).toFixed(6)} ${lo<0?'W':'E'}` : '—';
@@ -267,13 +258,7 @@ function render(s) {
 const fmtLog = e => `<div><span>${new Date(e.t*1000).toLocaleTimeString([], {hour12:false})}</span><span>${escapeHTML(e.msg)}</span></div>`;
 
 function drawDetection(det) {
-  const box = $('bbox'), lbl = $('bboxlbl'), img = $('cam');
-  if (!det || !det.person || !Array.isArray(det.bbox) || det.bbox.length < 4 || !img.naturalWidth) { box.style.display = lbl.style.display = 'none'; return; }
-  const [x, y, w, h] = det.bbox, W = img.naturalWidth, H = img.naturalHeight;
-  box.style.left = (x/W*100)+'%'; box.style.top = (y/H*100)+'%'; box.style.width = (w/W*100)+'%'; box.style.height = (h/H*100)+'%';
-  lbl.style.left = (x/W*100)+'%'; lbl.style.top = `calc(${y/H*100}% - 20px)`;
-  lbl.textContent = `PERSON ${(det.confidence*100).toFixed(0)}%`;
-  box.style.display = lbl.style.display = 'block';
+  $('bbox').style.display=$('bboxlbl').style.display='none';
 }
 function tickClock() {
   const now = new Date();
@@ -371,7 +356,7 @@ function renderAI(s) {
   const key=JSON.stringify([s.ai.provider,s.ai.model]);
   if(key!==activeAI) {
     $('ai-provider').replaceChildren(...aiOptions.map(o=>{ const option=document.createElement('option'); option.value=o.provider; option.textContent=o.label; return option; }));
-    $('ai-provider').value=s.ai.provider; $('ai-model').value=s.ai.model; activeAI=key;
+    $('ai-provider').value=s.ai.provider; $('ai-model').value=s.ai.model; $('ai-model').placeholder=s.ai.provider.endsWith('_api')?'Enter API model ID':'CLI default (optional)'; activeAI=key;
   }
   const locked=s.phase!=='idle' || s.planning;
   for(const id of ['ai-provider','ai-model','ai-apply']) $(id).disabled=locked;

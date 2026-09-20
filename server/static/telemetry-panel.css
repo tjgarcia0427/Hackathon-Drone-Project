@@ -1,0 +1,11 @@
+.aircraft-overview { grid-column:1 / -1; padding:16px; background:var(--panel,var(--card,#fff)); border:1px solid var(--line,var(--border,#ddd)); border-radius:10px; min-width:0; }
+.aircraft-overview h2 { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 14px; font-size:14px; }
+.telemetry-badge { font-size:12px; font-weight:400; color:var(--dim,var(--secondary,#565c65)); }
+.telemetry-badge[data-fresh="true"] { color:var(--ok,#008817); }
+.aircraft-stats { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:16px 20px; margin:0; }
+.aircraft-stat { min-width:0; }
+.aircraft-stat dt { color:var(--dim,var(--secondary,#565c65)); font-size:11px; margin-bottom:4px; }
+.aircraft-stat dd { margin:0; font:600 clamp(14px,1.6vw,20px)/1.4 ui-monospace,Menlo,monospace; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.aircraft-note { margin:12px 0 0; font-size:12px; color:var(--dim,var(--secondary,#565c65)); }
+@media(max-width:1050px) { .aircraft-stats { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media(max-width:480px) { .aircraft-stats { grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; } }
