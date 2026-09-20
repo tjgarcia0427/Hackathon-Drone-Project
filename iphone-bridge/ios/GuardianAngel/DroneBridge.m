@@ -196,6 +196,11 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         if(!self->_homeSet && self->_gps && !state.isFlying) {
             self->_home=self->_pose; self->_homeSet=YES;
             [self note:@"Ground GPS anchor recorded. Restart server state before moving launch site."];
+        } else if(!self->_homeSet && self->_gps && state.isFlying && state.isHomeLocationSet && state.homeLocation && CLLocationCoordinate2DIsValid(state.homeLocation.coordinate)) {
+            // Reconnected while airborne (e.g. after a DJI Fly takeoff): adopt the aircraft's own DJI home point,
+            // the same reference its return-to-home uses, instead of waiting for a landing we cannot witness.
+            self->_home=(GAPose){state.homeLocation.coordinate.latitude,state.homeLocation.coordinate.longitude,0,self->_pose.heading}; self->_homeSet=YES;
+            [self note:@"Airborne: ground anchor taken from the aircraft's DJI home point."];
         }
         if(self->_flightEnabled && !self->_returning && (state.flightMode==DJIFlightModeGoHome || state.flightMode==DJIFlightModeAutoLanding))
             [self stopAutomation:@"Aircraft has entered its own return/landing mode; pilot control"];
