@@ -325,11 +325,20 @@ static UIView *NavyHeader(UIView *content) {
     [body addArrangedSubview:self.gateReason];
     GAButton *stop=[GAButton primary:@"STOP AI" target:self action:@selector(stopPressed)];
     stop.fill=GA_STOP; stop.pressedFill=GA_STOP_PRESS; stop.enabled=self.stopAI!=nil;
-    stop.accessibilityIdentifier=@"flight.stop"; [body addArrangedSubview:stop];
+    stop.accessibilityIdentifier=@"flight.stop";
     UIStackView *all=VStack(0); [all addArrangedSubview:top];
     UIView *pad=[UIView new]; [pad addSubview:body]; Pin(body,pad,UIEdgeInsetsMake(12,20,20,20)); [all addArrangedSubview:pad];
     [card addSubview:all]; Pin(all,card,UIEdgeInsetsZero);
-    UIScrollView *scroll=[UIScrollView new]; [self.view addSubview:scroll]; Pin(scroll,self.view,UIEdgeInsetsZero);
+    UIScrollView *scroll=[UIScrollView new]; [self.view addSubview:scroll]; scroll.translatesAutoresizingMaskIntoConstraints=NO;
+    [self.view addSubview:stop]; stop.translatesAutoresizingMaskIntoConstraints=NO;
+    [NSLayoutConstraint activateConstraints:@[
+        [stop.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:20],
+        [stop.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-20],
+        [stop.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-10],
+        [scroll.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [scroll.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [scroll.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [scroll.bottomAnchor constraintEqualToAnchor:stop.topAnchor constant:-10]]];
     [scroll addSubview:card]; card.translatesAutoresizingMaskIntoConstraints=NO;
     NSLayoutConstraint *center=[card.centerYAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.centerYAnchor]; center.priority=UILayoutPriorityDefaultLow;
     [NSLayoutConstraint activateConstraints:@[
@@ -470,147 +479,7 @@ static UIView *NavyHeader(UIView *content) {
     [self.stopButton setPreferredSymbolConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:20 weight:UIImageSymbolWeightBold] forImageInState:UIControlStateNormal];
     self.stopButton.imageEdgeInsets=UIEdgeInsetsMake(0,0,0,10);
     self.stopButton.titleLabel.adjustsFontSizeToFitWidth=YES; self.stopButton.titleLabel.minimumScaleFactor=0.8;
-    self.stopButton.enabled=NO; self.stopButton.accessibilityIdentifier=@"bridge.stop";
-    [bar addSubview:self.stopButton]; self.stopButton.translatesAutoresizingMaskIntoConstraints=NO;
-
-    for(UIView *v in @[header,self.strip,scroll,bar]) { v.translatesAutoresizingMaskIntoConstraints=NO; [self.view addSubview:v]; }
-    stack.translatesAutoresizingMaskIntoConstraints=NO;
-    [NSLayoutConstraint activateConstraints:@[
-        [header.topAnchor constraintEqualToAnchor:self.view.topAnchor],[header.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],[header.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.strip.topAnchor constraintEqualToAnchor:header.bottomAnchor],[self.strip.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],[self.strip.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [scroll.topAnchor constraintEqualToAnchor:self.strip.bottomAnchor],[scroll.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],[scroll.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],[scroll.bottomAnchor constraintEqualToAnchor:bar.topAnchor],
-        [bar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],[bar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],[bar.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
-        [barRule.topAnchor constraintEqualToAnchor:bar.topAnchor],[barRule.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor],[barRule.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor],
-        [self.stopButton.topAnchor constraintEqualToAnchor:bar.topAnchor constant:10],[self.stopButton.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor constant:16],[self.stopButton.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor constant:-16],
-        [self.stopButton.bottomAnchor constraintEqualToAnchor:bar.safeAreaLayoutGuide.bottomAnchor constant:-10],
-        [stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor constant:16],
-        [stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor constant:-16],
-        [stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor constant:12],
-        [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-8],
-        [stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-32]]];
-    UIApplication.sharedApplication.idleTimerDisabled=YES;
-    [self render];
-}
-- (void)viewWillAppear:(BOOL)animated { [super viewWillAppear:animated]; [self.navigationController setNavigationBarHidden:YES animated:NO]; }
-- (UIView *)dot { UIView *d=[UIView new]; d.layer.cornerRadius=4; d.backgroundColor=GA_STOP; [d.widthAnchor constraintEqualToConstant:8].active=YES; [d.heightAnchor constraintEqualToConstant:8].active=YES; return d; }
-
-- (UIView *)buildCamera {
-    self.preview=[UIView new]; self.preview.backgroundColor=UIColor.blackColor; self.preview.layer.cornerRadius=4; self.preview.clipsToBounds=YES;
-    self.preview.layer.borderWidth=1; self.preview.layer.borderColor=GA_SECONDARY.CGColor;
-    [self.preview.heightAnchor constraintEqualToAnchor:self.preview.widthAnchor multiplier:9.0/16].active=YES;
-    // Overlays live in a sibling so DJIVideoPreviewer keeps sole ownership of the preview's sublayers.
-    UIView *overlay=[UIView new]; overlay.userInteractionEnabled=NO; overlay.layer.cornerRadius=4; overlay.clipsToBounds=YES;
-    GAGradientView *top=[[GAGradientView alloc] initTop:YES], *bottom=[[GAGradientView alloc] initTop:NO];
-    self.camSource=Label(@"NO FEED",Mono(11,UIFontWeightRegular),UIColor.whiteColor); self.camSource.numberOfLines=1;
-    UIStackView *topRow=HStack(8); [topRow addArrangedSubview:self.camSource]; [topRow addArrangedSubview:Gap()];
-    [topRow addArrangedSubview:Label(@"PREVIEW",Mono(11,UIFontWeightRegular),UIColor.whiteColor)];
-    [top addSubview:topRow]; Pin(topRow,top,UIEdgeInsetsMake(8,10,8,10));
-    self.camCoords=Label(@"—",Mono(11,UIFontWeightRegular),UIColor.whiteColor); self.camCoords.numberOfLines=1;
-    self.camClock=Label(@"",Mono(11,UIFontWeightRegular),UIColor.whiteColor); self.camClock.numberOfLines=1;
-    UIStackView *bottomRow=HStack(8); [bottomRow addArrangedSubview:self.camCoords]; [bottomRow addArrangedSubview:Gap()]; [bottomRow addArrangedSubview:self.camClock];
-    [bottom addSubview:bottomRow]; Pin(bottomRow,bottom,UIEdgeInsetsMake(8,10,8,10));
-    [overlay addSubview:top]; [overlay addSubview:bottom]; top.translatesAutoresizingMaskIntoConstraints=NO; bottom.translatesAutoresizingMaskIntoConstraints=NO;
-    [NSLayoutConstraint activateConstraints:@[
-        [top.topAnchor constraintEqualToAnchor:overlay.topAnchor],[top.leadingAnchor constraintEqualToAnchor:overlay.leadingAnchor],[top.trailingAnchor constraintEqualToAnchor:overlay.trailingAnchor],
-        [bottom.bottomAnchor constraintEqualToAnchor:overlay.bottomAnchor],[bottom.leadingAnchor constraintEqualToAnchor:overlay.leadingAnchor],[bottom.trailingAnchor constraintEqualToAnchor:overlay.trailingAnchor]]];
-    UIView *wrap=[UIView new]; [wrap addSubview:self.preview]; Pin(self.preview,wrap,UIEdgeInsetsZero); [wrap addSubview:overlay]; Pin(overlay,wrap,UIEdgeInsetsZero);
-    self.mockPreview=Label(@"MOCK HARDWARE\nNo live camera\nTest frames are sent to the server",Mono(12,UIFontWeightRegular),UIColor.whiteColor);
-    self.mockPreview.textAlignment=NSTextAlignmentCenter; self.mockPreview.hidden=YES;
-    [overlay addSubview:self.mockPreview]; self.mockPreview.translatesAutoresizingMaskIntoConstraints=NO;
-    [NSLayoutConstraint activateConstraints:@[
-        [self.mockPreview.centerYAnchor constraintEqualToAnchor:overlay.centerYAnchor],
-        [self.mockPreview.leadingAnchor constraintEqualToAnchor:overlay.leadingAnchor constant:16],
-        [self.mockPreview.trailingAnchor constraintEqualToAnchor:overlay.trailingAnchor constant:-16]]];
-    return wrap;
-}
-- (UIView *)buildTelemetry {
-    UIView *card=Card(); UIStackView *v=VStack(0);
-    [v addArrangedSubview:CardHeader(@"Telemetry",nil,UIEdgeInsetsMake(8,12,9,12))];
-    NSArray *labels=@[@"Battery",@"Altitude",@"Heading",@"GPS fix",@"Ground anchor",@"Speed cap"];
-    NSMutableArray *cells=[NSMutableArray new];
-    for(int row=0;row<2;row++) {
-        UIStackView *h=HStack(0); h.alignment=UIStackViewAlignmentFill; h.distribution=UIStackViewDistributionFillEqually;
-        for(int col=0;col<3;col++) {
-            GATeleCell *c=[[GATeleCell alloc] initWithLabel:labels[row*3+col]]; [cells addObject:c];
-            if(col>0) {
-                UIView *vr=[UIView new]; vr.backgroundColor=GA_BORDER; [c addSubview:vr]; vr.translatesAutoresizingMaskIntoConstraints=NO;
-                [NSLayoutConstraint activateConstraints:@[[vr.widthAnchor constraintEqualToConstant:1],[vr.leadingAnchor constraintEqualToAnchor:c.leadingAnchor],[vr.topAnchor constraintEqualToAnchor:c.topAnchor],[vr.bottomAnchor constraintEqualToAnchor:c.bottomAnchor]]];
-            }
-            [h addArrangedSubview:c];
-        }
-        [v addArrangedSubview:h]; if(row==0) [v addArrangedSubview:Rule(GA_BORDER)];
-    }
-    self.cells=cells; self.cells[5].value.text=[NSString stringWithFormat:@"%.1f m/s",GA_MAX_SPEED_MPS];
-    [card addSubview:v]; Pin(v,card,UIEdgeInsetsZero); return card;
-}
-- (UIView *)buildProcedure {
-    UIView *card=Card(); UIStackView *v=VStack(0);
-    self.progress=Label(@"0 / 4",Mono(11,UIFontWeightRegular),GA_SECONDARY); self.progress.numberOfLines=1;
-    [v addArrangedSubview:CardHeader(@"Pre-flight procedure",self.progress,UIEdgeInsetsMake(8,12,9,12))];
-    NSArray *titles=@[@"Start bridge",@"Connect server",@"Arm camera only",@"Enable flight"];
-    NSMutableArray *steps=[NSMutableArray new];
-    for(NSUInteger i=0;i<titles.count;i++) { GAStepRow *r=[[GAStepRow alloc] initWithNumber:i+1 title:titles[i]]; [steps addObject:r]; [v addArrangedSubview:r]; }
-    self.steps=steps;
-    // Action area: every variant is built once; render shows the one for the in-progress step.
-    self.actionArea=[UIView new]; self.actionStack=VStack(8);
-    self.mockRow=[UIView new]; UIStackView *mr=HStack(8);
-    [mr addArrangedSubview:Label(@"Mock hardware (no drone needed)",Sans(14,UIFontWeightRegular),GA_INK)];
-    [mr addArrangedSubview:Gap()];
-    self.mockSwitch=[UISwitch new]; self.mockSwitch.on=YES; self.mockSwitch.onTintColor=GA_PRIMARY;
-    [self.mockSwitch addTarget:self action:@selector(render) forControlEvents:UIControlEventValueChanged];
-    [mr addArrangedSubview:self.mockSwitch];
-    [self.mockRow addSubview:mr]; Pin(mr,self.mockRow,UIEdgeInsetsMake(0,2,4,0));
-    self.startButton=[GAButton primary:@"Start bridge" target:self action:@selector(start)];
-    self.startButton.accessibilityIdentifier=@"bridge.start";
-    self.address=[UITextField new]; self.address.borderStyle=UITextBorderStyleRoundedRect; self.address.keyboardType=UIKeyboardTypeURL;
-    self.address.autocapitalizationType=UITextAutocapitalizationTypeNone; self.address.autocorrectionType=UITextAutocorrectionTypeNo;
-    self.address.placeholder=@"http://YOUR-LAPTOP-IP:8000"; self.address.font=Mono(14,UIFontWeightRegular); self.address.delegate=self;
-    self.address.text=[[NSUserDefaults standardUserDefaults] stringForKey:@"serverURL"]?:@"http://192.168.1.100:8000";
-    self.address.accessibilityLabel=@"Server base URL"; [self.address.heightAnchor constraintEqualToConstant:44].active=YES;
-    self.connectButton=[GAButton primary:@"Connect server" target:self action:@selector(connect)];
-    self.connectButton.accessibilityIdentifier=@"bridge.connect";
-    self.cameraButton=[GAButton primary:@"Arm camera only" target:self action:@selector(camera)];
-    self.cameraButton.accessibilityIdentifier=@"bridge.camera";
-    self.cameraHelp=Label(@"Optional camera check. Server can tilt the gimbal; aircraft flight stays with the pilot.",Sans(12,UIFontWeightRegular),GA_SECONDARY); self.cameraHelp.textAlignment=NSTextAlignmentCenter;
-    self.flightButton=[GAButton primary:@"Enable flight" target:self action:@selector(flight)];
-    self.flightButton.accessibilityIdentifier=@"bridge.flight";
-    self.flightHelp=Label(@"Aircraft airborne at 5–30 m, within 40 m of the anchor. You will confirm first.",Sans(12,UIFontWeightRegular),GA_SECONDARY); self.flightHelp.textAlignment=NSTextAlignmentCenter;
-    self.commandRow=[UIView new]; UIStackView *cr=HStack(12);
-    UIView *amber=[UIView new]; amber.backgroundColor=GA_CAUTION_DK; amber.layer.cornerRadius=5;
-    [amber.widthAnchor constraintEqualToConstant:10].active=YES; [amber.heightAnchor constraintEqualToConstant:10].active=YES;
-    UIStackView *ct=VStack(0); self.commandTitle=Label(@"Awaiting server command",Sans(14,UIFontWeightBold),GA_INK); [ct addArrangedSubview:self.commandTitle];
-    self.commandText=Label(@"Awaiting server command",Mono(12,UIFontWeightRegular),GA_SECONDARY); [ct addArrangedSubview:self.commandText];
-    [cr addArrangedSubview:amber]; [cr addArrangedSubview:ct]; [self.commandRow addSubview:cr]; Pin(cr,self.commandRow,UIEdgeInsetsZero);
-    for(UIView *x in @[self.mockRow,self.startButton,self.address,self.connectButton,self.cameraButton,self.cameraHelp,self.flightButton,self.flightHelp,self.commandRow]) { x.hidden=YES; [self.actionStack addArrangedSubview:x]; }
-    [self.actionArea addSubview:self.actionStack]; Pin(self.actionStack,self.actionArea,UIEdgeInsetsMake(12,12,12,12));
-    [v addArrangedSubview:self.actionArea];
-    [card addSubview:v]; Pin(v,card,UIEdgeInsetsZero); return card;
-}
-- (UIView *)buildLog {
-    UIView *card=Card(); UIStackView *v=VStack(0);
-    UIStackView *meta=HStack(6);
-    self.logCount=Label(@"0 entries",Mono(11,UIFontWeightRegular),GA_SECONDARY); self.logCount.numberOfLines=1;
-    UIImageView *arrow=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"arrow.up.right"]]; arrow.tintColor=GA_SECONDARY;
-    arrow.preferredSymbolConfiguration=[UIImageSymbolConfiguration configurationWithPointSize:10 weight:UIImageSymbolWeightBold];
-    [meta addArrangedSubview:self.logCount]; [meta addArrangedSubview:arrow];
-    UIView *header=CardHeader(@"Event log",meta,UIEdgeInsetsMake(8,12,9,12));
-    [header addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(openLog)]];
-    header.isAccessibilityElement=YES; header.accessibilityTraits=UIAccessibilityTraitButton; header.accessibilityLabel=@"Open event log";
-    [v addArrangedSubview:header];
-    self.logTail=VStack(0); [v addArrangedSubview:self.logTail];
-    [card addSubview:v]; Pin(v,card,UIEdgeInsetsZero); return card;
-}
-
-// Log ----------------------------------------------------------------------------
-- (void)append:(NSString *)line {
-    if(!NSThread.isMainThread) { dispatch_async(dispatch_get_main_queue(),^{ [self append:line]; }); return; }
-    NSString *msg=line?:@"";
-    [self.entries addObject:@{@"t":[self.clock stringFromDate:NSDate.date],@"msg":msg}]; self.logChars+=msg.length+10;
-    // Same 12 000-char budget as the previous text view: trim the oldest entries back to ~10 000.
-    if(self.logChars>12000) { while(self.entries.count && self.logChars>10000) { self.logChars-=[self.entries[0][@"msg"] length]+10; [self.entries removeObjectAtIndex:0]; } }
-    for(UIView *x in self.logTail.arrangedSubviews.copy) { [self.logTail removeArrangedSubview:x]; [x removeFromSuperview]; }
-    NSUInteger n=self.entries.count, from=n>4?n-4:0;
-    for(NSUInteger i=from;i<n;i++) [self.logTail addArrangedSubview:LogRow(self.entries[i][@"t"],self.entries[i][@"msg"],11.5,UIEdgeInsetsMake(6,12,6,12))];
+    self.stopButton.enabled=…3423 tokens truncated…r(NSUInteger i=from;i<n;i++) [self.logTail addArrangedSubview:LogRow(self.entries[i][@"t"],self.entries[i][@"msg"],11.5,UIEdgeInsetsMake(6,12,6,12))];
     self.logCount.text=[NSString stringWithFormat:@"%lu entries",(unsigned long)n];
     UIViewController *top=self.navigationController.topViewController;
     if([top isKindOfClass:LogViewController.class]) [(LogViewController *)top reload:self.entries.copy];

@@ -114,6 +114,10 @@ Choose ChatGPT subscription via Codex CLI, Claude subscription via Claude Code C
 
 For remote teammates, use a private authenticated VPN or run the server beside the pilot and access that machine through your existing secure connection. **This repository's server has no authentication. Do not publish it through an open internet tunnel:** anyone who can reach it can submit incidents/commands and images. For a shared venue network, use your own private network. The development app permits local HTTP traffic; public deployment would require TLS and server-side authentication.
 
+## Redesigned UI on `ui-redesign`
+
+See [UI handoff and regression](../docs/IPHONE_UI_HANDOFF.md). Camera-only control is optional. After arming it, tap **Stop camera control**, then **Enable flight** and confirm separately. STOP never automatically enables flight. The original flight checks and working video pipeline are preserved. The initial UI correction passed an unsigned production iPhone build in macOS CI; physical video/control regression is still required before merging.
+
 ## Hardware sequence
 
 1. Initially remove propellers. Close DJI Fly, turn **Mock hardware off before Start bridge**, and connect aircraft, controller and iPhone. The first DJI registration requires internet access.
@@ -173,3 +177,4 @@ The three optional FastAPI transport tests require `python -m pip install -r too
 - `VALIDATION.md`: what was verified and what still needs hardware.
 
 API references: [DJI iOS SDK source/sample](https://github.com/dji-sdk/Mobile-SDK-iOS), [DJIWidget](https://github.com/dji-sdk/DJIWidget), [DJI flight controller API](https://developer.dji.com/api-reference/ios-api/Components/FlightController/DJIFlightController.html). Dependency licenses remain applicable; see `THIRD-PARTY-NOTICES.md`.
+

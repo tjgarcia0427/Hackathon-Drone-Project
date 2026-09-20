@@ -4,7 +4,7 @@ Hackathon prototype for Claude Code Build Day, Miami, September 20, 2026. A Watc
 
 **The current implementation uses iPhone + DJI Mobile SDK V4 iOS. Android is no longer part of the build plan.** We use DJI's app SDK; aircraft firmware is not modified.
 
-**Status:** the native Watch app **compiles and links in Xcode CI**, its Swift core tests pass, and all 37 server tests pass. See [Watch validation](watch-app/VALIDATION.md). Signed installation and real GPS/motion/network tests on the team's SE remain. The separate iPhone bridge has portable navigation/server tests; its Xcode/device/aircraft validation must be completed by the team.
+**Status:** the native Watch app **compiles and links in Xcode CI**, its Swift core tests pass, and all 37 server tests pass. See [Watch validation](watch-app/VALIDATION.md). Signed installation and real GPS/motion/network tests on the team's SE remain. Lorenzo reports a successful iPhone/aircraft bench test: telemetry, physical gimbal commands, live video on phone and dashboard, and a mock mission through the phone. The redesigned iPhone target also compiles and links in macOS CI. Real flight and the redesigned UI on hardware still need testing. See the [iPhone UI branch handoff](docs/IPHONE_UI_HANDOFF.md).
 
 ## How the pieces connect
 
@@ -21,6 +21,8 @@ flowchart LR
 The server interprets images and chooses small actions. The iPhone validates those actions and runs a deterministic local flight-control loop through DJI's SDK. The pilot takes off manually and enables flight control locally on the iPhone before server commands can move the aircraft. Reconnecting never automatically re-arms it.
 
 The native **Watch app** now provides Send Help and a deliberate shake gesture, a five-second cancel countdown, location capture, receipts/retries and default-on Test mode. Shake runs only while the app is active; it is not Apple's built-in fall detection. See [Watch setup and first test](docs/WATCH_SETUP.md). A visual "found" result is a candidate for human review; its current map coordinates are the aircraft's location, not a calculated location of the person.
+
+**UI work is isolated on `ui-redesign`.** Keep the working `main` for the initial outdoor flight test; Lorenzo validates the redesigned app on his Mac/iPhone before merging.
 
 ## Start here
 
@@ -140,3 +142,4 @@ docs/AGENT_HANDOFF.md           Teammate context and remaining device validation
 ```
 
 Work directly on `main` as requested by the team; this project is not using pull requests. Coordinate edits before replacing files another teammate is changing.
+

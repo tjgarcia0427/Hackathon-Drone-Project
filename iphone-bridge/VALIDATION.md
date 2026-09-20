@@ -2,6 +2,10 @@
 
 Prepared on Windows, September 19, 2026, for the Mavic Air 2 / iPhone bridge.
 
+## September 20 UI branch update
+
+[Run 35491353246](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35491353246) passed for `73f4dcb`: production iPhone target compiled and linked unsigned with DJI 4.16.2 / DJIWidget 1.6.8, plus UI-state, navigation and full bridge-preservation checks. Subsequent branch commits run the same checks and a simulator-only UIKit interaction harness. See [UI handoff](../docs/IPHONE_UI_HANDOFF.md) for the precise limits and the required physical regression. Earlier statements below about unavailable Xcode describe the original Windows-only validation, not this newer build result.
+
 ## Passed locally
 
 - Compiled `Navigation.c` with a C compiler (Zig's Clang frontend) using `-Wall -Wextra -Werror` and executed `navigation_test.c`.
@@ -46,4 +50,5 @@ The coordinated repository update additionally passed six `server/test_safety.py
 - End-to-end operation with your real planner, Watch/Shortcut trigger, and fall/person-detection scenario.
 
 The mock mode shares navigation math with the real bridge but does not simulate GPS noise, aircraft inertia, terrain, obstacles, radio delay, or DJI failsafes. Its results do not validate physical flight performance. No `.ipa` or signed binary is included because the Apple build/signing steps require a Mac.
+
 

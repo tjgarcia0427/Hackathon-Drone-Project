@@ -29,6 +29,8 @@ jobs:
           ruby-version: '3.3'
           bundler-cache: true
           working-directory: iphone-bridge/ios
+      - name: Exercise production UIKit controls with simulated hardware
+        run: bash iphone-bridge/tests/ui/run-mac.sh
       - name: Install pinned DJI dependencies
         working-directory: iphone-bridge/ios
         run: |
@@ -47,3 +49,8 @@ jobs:
         with:
           name: iphone-build-log
           path: iphone-bridge/ios/build-ci.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iphone-ui-screenshots
+          path: ${{ runner.temp }}/guardian-ui-smoke/
