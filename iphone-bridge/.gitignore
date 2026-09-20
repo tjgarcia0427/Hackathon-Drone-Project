@@ -1,0 +1,10 @@
+ios/Pods/
+ios/Config/Secrets.xcconfig
+ios/*.xcworkspace/
+ios/**/xcuserdata/
+ios/.bundle/
+ios/vendor/
+*.xcuserstate
+DerivedData/
+__pycache__/
+*.before-iphone
