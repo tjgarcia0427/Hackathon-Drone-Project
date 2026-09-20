@@ -2,7 +2,7 @@
 #import "DroneBridge.h"
 
 static UIViewController *Root(void) {
-    UIWindow *window=[[UIApplication sharedApplication].delegate valueForKey:@"window"];
+    UIWindow *window=[(NSObject *)[UIApplication sharedApplication].delegate valueForKey:@"window"];
     return ((UINavigationController *)window.rootViewController).viewControllers.firstObject;
 }
 static void Result(BOOL ok, NSString *message) {
