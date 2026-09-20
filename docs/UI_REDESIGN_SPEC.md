@@ -7,7 +7,7 @@ See [IPHONE_UI_HANDOFF.md](IPHONE_UI_HANDOFF.md). These corrections override ill
 ## Overview
 Guardian Angel is a public-safety prototype: a Watch/phone incident trigger sends a location to a Python command center, which plans a supervised drone search and drives a DJI Mavic Air 2 through a locally installed iPhone bridge app. This handoff redesigns both operator surfaces:
 
-1. **iPhone bridge app** (`iphone-bridge/ios/GuardianAngel`, Objective-C UIKit, single `BridgeViewController` in `AppDelegate.m`) — restructured into a guided **pre-flight procedure** (start bridge → connect server → arm camera only → enable flight) with an always-visible operational status strip, telemetry table, event log, and a persistent STOP control.
+1. **iPhone bridge app** (`iphone-bridge/ios/GuardianAngel`, Objective-C UIKit, single `BridgeViewController` in `AppDelegate.m`) — restructured into a guided **pre-flight procedure** (start bridge → connect server → optional camera check → STOP camera control → separately confirm flight) with an always-visible operational status strip, telemetry table, event log, and a persistent STOP control.
 2. **Operator command center** (`server/static/index.html`, vanilla HTML/JS served by FastAPI) — restyled in the same institutional language; same panels and controls, new hierarchy.
 
 Direction: **government / public-safety**. Modeled on U.S. government digital standards (USWDS-style palette, Public Sans, bordered tables, square corners, uppercase status labels). Not playful. Color carries operational meaning only.

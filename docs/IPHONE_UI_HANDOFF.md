@@ -22,6 +22,10 @@ The DJI decoder delegate, Mavic Air 2 encoder selection/reset, software decode, 
 
 The first correction commit `73f4dcb` passed the [macOS iPhone build](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35491353246): pinned CocoaPods installed, the **production iPhone target compiled and linked unsigned**, and presentation-state / navigation / preservation checks passed.
 
+
+
+[Run 35491733367](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35491733367) passed for `6abcd68`: the production app compiled/linked again, the simulator interaction sequence passed, and 12 state screenshots were captured. Review of the simulator log found no Auto Layout conflict messages. These are simulated hardware states, not a real DJI mission. Screenshot review led to a final label-fitting and STOP alignment polish, which is covered by the next branch run.
+
 Later changes must pass the branch's `iPhone UI checks` workflow again. It also builds the production UIKit controller in a separate **simulator-only harness**, using fake hardware and server state. This exercises camera STOP, separate flight confirmation, log STOP, rejection of a disconnected/stale confirmation, and modal STOP. Artifacts contain state screenshots and build logs. The harness is never part of the production target and does not test DJI hardware or a real server mission.
 
 The working original app passed Lorenzo's props-off bench, including phone/dashboard video and physical gimbal commands. The redesigned app still requires the same check on his physical iPhone. Real flight and physical Watch validation are separate outstanding gates. The Watch already compiled on macOS CI; it is not an unbuilt app.

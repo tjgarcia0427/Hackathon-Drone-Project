@@ -178,6 +178,7 @@ typedef NS_ENUM(NSInteger, GAStepState) { GAStepLocked, GAStepInProgress, GAStep
 - (instancetype)initWithLabel:(NSString *)label {
     if((self=[super initWithFrame:CGRectZero])) {
         self.label=Caps(label,10,UIFontWeightRegular,0.8,GA_SECONDARY);
+        self.label.adjustsFontSizeToFitWidth=YES; self.label.minimumScaleFactor=0.75;
         self.value=Label(@"—",Mono(17,UIFontWeightMedium),GA_INK); self.value.numberOfLines=1; self.value.adjustsFontSizeToFitWidth=YES; self.value.minimumScaleFactor=0.7;
         UIStackView *v=VStack(2); [v addArrangedSubview:self.label]; [v addArrangedSubview:self.value];
         [self addSubview:v]; Pin(v,self,UIEdgeInsetsMake(10,12,10,12));
@@ -325,15 +326,15 @@ static UIView *NavyHeader(UIView *content) {
     [body addArrangedSubview:self.gateReason];
     GAButton *stop=[GAButton primary:@"STOP AI" target:self action:@selector(stopPressed)];
     stop.fill=GA_STOP; stop.pressedFill=GA_STOP_PRESS; stop.enabled=self.stopAI!=nil;
-    stop.accessibilityIdentifier=@"flight.stop";
+    stop.accessibilityIdentifier=@"flight.stop"; stop.height.constant=56;
     UIStackView *all=VStack(0); [all addArrangedSubview:top];
     UIView *pad=[UIView new]; [pad addSubview:body]; Pin(body,pad,UIEdgeInsetsMake(12,20,20,20)); [all addArrangedSubview:pad];
     [card addSubview:all]; Pin(all,card,UIEdgeInsetsZero);
     UIScrollView *scroll=[UIScrollView new]; [self.view addSubview:scroll]; scroll.translatesAutoresizingMaskIntoConstraints=NO;
     [self.view addSubview:stop]; stop.translatesAutoresizingMaskIntoConstraints=NO;
     [NSLayoutConstraint activateConstraints:@[
-        [stop.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:20],
-        [stop.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-20],
+        [stop.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:16],
+        [stop.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-16],
         [stop.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-10],
         [scroll.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [scroll.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],

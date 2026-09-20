@@ -41,7 +41,7 @@ static void Run(void) {
     if(![scenario isEqual:@"offline"]) Click(root,@"connectButton");
     Invoke(root,@"refreshState");
     if(![scenario isEqual:@"flow"]) {
-        if([scenario isEqual:@"camera"]) Click(root,@"cameraButton");
+        if([scenario isEqual:@"camera"] || [scenario isEqual:@"procedure"]) Click(root,@"cameraButton");
         if([scenario isEqual:@"flight"]) { state[@"mock"]=@NO; state[@"armed"]=@YES; state[@"flightEnabled"]=@YES; }
         if([scenario isEqual:@"returning"]) { state[@"mock"]=@NO; state[@"returning"]=@YES; }
         if([scenario isEqual:@"pending"]) state[@"pendingTransitions"]=@1;
@@ -51,7 +51,17 @@ static void Run(void) {
         Invoke(root,@"refreshState");
         if([scenario isEqual:@"modal"]) Click(root,@"flightButton");
         if([scenario isEqual:@"log"]) Invoke(root,@"openLog");
-        Later(^{ [root.view layoutIfNeeded]; Result(YES,[scenario stringByAppendingString:@" rendered"]); });
+        Later(^{
+            [root.view layoutIfNeeded];
+            if([scenario isEqual:@"procedure"]) {
+                UIButton *action=[root valueForKey:@"flightButton"];
+                UIView *ancestor=action.superview;
+                while(ancestor && ![ancestor isKindOfClass:UIScrollView.class]) ancestor=ancestor.superview;
+                Check(ancestor!=nil,@"Procedure action must be reachable by scrolling");
+                [(UIScrollView *)ancestor scrollRectToVisible:[action convertRect:action.bounds toView:ancestor] animated:NO];
+            }
+            Result(YES,[scenario stringByAppendingString:@" rendered"]);
+        });
         return;
     }
     // Exercise the actual production controller actions; the stand-in enforces the camera interlock.
