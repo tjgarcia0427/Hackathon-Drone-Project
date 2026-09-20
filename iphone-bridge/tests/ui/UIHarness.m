@@ -87,7 +87,7 @@ static void Run(void) {
         if([scenario isEqual:@"gps-waiting"]) { state[@"mock"]=@NO; state[@"gps"]=@NO; state[@"homeSet"]=@NO; state[@"positionFresh"]=@NO; state[@"gpsFresh"]=@NO; state[@"displayAltitude"]=@0; }
         if([scenario isEqual:@"low-battery"]) { state[@"mock"]=@NO; state[@"battery"]=@24; }
         Invoke(root,@"refreshState");
-        if([scenario isEqual:@"modal"]) Click(root,@"flightButton");
+        if([scenario isEqual:@"modal"]) { Click(root,@"flightButton"); Check(root.presentedViewController==nil,@"No checklist required"); }
         if([scenario isEqual:@"log"]) Invoke(root,@"openLog");
         Later(^{
             [root.view layoutIfNeeded];
@@ -114,35 +114,22 @@ static void Run(void) {
     Check(![state[@"armed"] boolValue],@"First flight-step action must STOP camera control");
     Check([[bridge valueForKey:@"flightRequests"] integerValue]==0,@"STOP must not auto-enable flight");
     Click(root,@"flightButton");
+    Check(root.presentedViewController==nil,@"Enable flight must not show a checklist/modal");
+    Check([state[@"flightEnabled"] boolValue],@"Local enable tap must enable mock flight");
+    Check([[bridge valueForKey:@"flightRequests"] integerValue]==1,@"Exactly one flight enable request expected");
+    Invoke(root,@"openLog");
     Later(^{
-        UIViewController *modal=root.presentedViewController;
-        Check(modal!=nil,@"Separate confirmation must be presented");
-        Click(modal,@"enable");
+        UIViewController *log=root.navigationController.topViewController;
+        UIButton *stop=FindButton(log.view,@"log.stop"); Check(stop.enabled,@"STOP must remain accessible in the log");
+        [stop sendActionsForControlEvents:UIControlEventTouchUpInside];
+        Check(![state[@"flightEnabled"] boolValue],@"Log STOP must disable mock flight");
+        Invoke(log,@"close");
         Later(^{
-            Check([state[@"flightEnabled"] boolValue],@"Separate confirmation must enable mock flight");
-            Check([[bridge valueForKey:@"flightRequests"] integerValue]==1,@"Exactly one flight enable request expected");
-            Invoke(root,@"openLog");
-            Later(^{
-                UIViewController *log=root.navigationController.topViewController;
-                UIButton *stop=FindButton(log.view,@"log.stop"); Check(stop.enabled,@"STOP must remain accessible in the log");
-                [stop sendActionsForControlEvents:UIControlEventTouchUpInside];
-                Check(![state[@"flightEnabled"] boolValue],@"Log STOP must disable mock flight");
-                Invoke(log,@"close");
-                Later(^{
-                    Click(root,@"flightButton");
-                    Later(^{
-                        UIViewController *confirm=root.presentedViewController;
-                        [bridge.client disconnect]; state[@"telemetryFresh"]=@NO;
-                        // Invoke the action directly to test final revalidation, before any timer refresh.
-                        Invoke(confirm,@"go");
-                        Check([[bridge valueForKey:@"flightRequests"] integerValue]==1,@"Stale/disconnected confirmation must not enable flight");
-                        Check(![[confirm valueForKey:@"enable"] isEnabled],@"Confirm must become disabled on stale state");
-                        UIButton *stopModal=FindButton(confirm.view,@"flight.stop"); Check(stopModal.enabled,@"Modal must offer STOP");
-                        [stopModal sendActionsForControlEvents:UIControlEventTouchUpInside];
-                        Result(YES,@"Camera STOP, separate confirmation, log STOP, stale-state rejection and modal STOP passed");
-                    });
-                });
-            });
+            [bridge.client disconnect]; state[@"telemetryFresh"]=@NO;
+            Invoke(root,@"flight");
+            Check([[bridge valueForKey:@"flightRequests"] integerValue]==1,@"Stale/disconnected direct action must not enable flight");
+            Check(root.presentedViewController==nil,@"No checklist modal on rejected requests");
+            Result(YES,@"Direct local enable, camera STOP interlock, log STOP and stale-state rejection passed");
         });
     });
 }

@@ -268,121 +268,7 @@ static UIView *NavyHeader(UIView *content) {
 @end
 
 // ---------------------------------------------------------------------------
-// Enable supervised flight — custom modal with live gate checks.
-// ---------------------------------------------------------------------------
-@interface FlightConfirmViewController : UIViewController
-@property(nonatomic,copy) void (^confirm)(void);
-@property(nonatomic,copy) void (^stopAI)(void);
-@property(nonatomic,copy) NSDictionary *(^readTelemetry)(void);
-@property(nonatomic,strong) UILabel *gateReason;
-@property(nonatomic,strong) NSTimer *gateTimer;
-@property(nonatomic,strong) NSArray<UILabel *> *values;
-@property(nonatomic,strong) NSArray<UIImageView *> *marks;
-@property(nonatomic,strong) GAButton *enable;
-- (void)updateWithTelemetry:(NSDictionary *)t;
-@end
-@implementation FlightConfirmViewController
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    self.view.backgroundColor=[UIColor colorWithRed:27/255.0 green:27/255.0 blue:27/255.0 alpha:0.7];
-    UIView *card=[UIView new]; card.backgroundColor=UIColor.whiteColor; card.layer.cornerRadius=4;
-    card.layer.shadowColor=UIColor.blackColor.CGColor; card.layer.shadowOpacity=0.3; card.layer.shadowOffset=CGSizeMake(0,8); card.layer.shadowRadius=12;
-    UIView *top=[UIView new]; top.backgroundColor=GA_CAUTION_DK; [top.heightAnchor constraintEqualToConstant:8].active=YES;
-    UIStackView *body=VStack(10);
-    UIStackView *titleRow=HStack(10);
-    UIImageView *warn=[[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"exclamationmark.triangle.fill"]]; warn.tintColor=GA_CAUTION_DK;
-    warn.preferredSymbolConfiguration=[UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightBold];
-    [titleRow addArrangedSubview:warn]; [titleRow addArrangedSubview:Label(@"Enable supervised flight?",Sans(18,UIFontWeightHeavy),GA_INK)];
-    [body addArrangedSubview:titleRow];
-    [body addArrangedSubview:Label(@"The pilot must have the aircraft airborne at 5–30 m in an open area, within 40 m of the recorded launch point. The server can now move it. Keep the RC ready.",Sans(14,UIFontWeightRegular),GA_INK)];
-    UIView *table=[UIView new]; table.layer.borderWidth=1; table.layer.borderColor=GA_BORDER.CGColor; table.layer.cornerRadius=4;
-    UIStackView *rows=VStack(0); [table addSubview:rows]; Pin(rows,table,UIEdgeInsetsZero);
-    NSMutableArray *values=[NSMutableArray new], *marks=[NSMutableArray new];
-    NSArray *labels=@[@"Battery ≥ 30%",@"Altitude 5–30 m",@"Distance from anchor ≤ 40 m"];
-    for(NSUInteger i=0;i<labels.count;i++) {
-        UIView *r=[UIView new];
-        UIStackView *h=HStack(8);
-        [h addArrangedSubview:Label(labels[i],Sans(13,UIFontWeightRegular),GA_SECONDARY)];
-        [h addArrangedSubview:Gap()];
-        UILabel *v=Label(@"—",Mono(13,UIFontWeightRegular),GA_INK); v.numberOfLines=1; [values addObject:v]; [h addArrangedSubview:v];
-        UIImageView *m=[UIImageView new]; m.preferredSymbolConfiguration=[UIImageSymbolConfiguration configurationWithPointSize:12 weight:UIImageSymbolWeightBold]; [marks addObject:m]; [h addArrangedSubview:m];
-        [r addSubview:h]; Pin(h,r,UIEdgeInsetsMake(8,12,8,12));
-        if(i+1<labels.count) PinBottomRule(Rule(GA_BORDER),r);
-        [rows addArrangedSubview:r];
-    }
-    self.values=values; self.marks=marks;
-    [body addArrangedSubview:Spacer(4)]; [body addArrangedSubview:table];
-    UIStackView *buttons=HStack(8); buttons.distribution=UIStackViewDistributionFillEqually;
-    UIButton *cancel=[UIButton buttonWithType:UIButtonTypeCustom]; [cancel setTitle:@"Cancel" forState:UIControlStateNormal];
-    [cancel setTitleColor:GA_INK forState:UIControlStateNormal]; cancel.titleLabel.font=Sans(15,UIFontWeightBold);
-    cancel.layer.borderWidth=2; cancel.layer.borderColor=GA_SECONDARY.CGColor; cancel.layer.cornerRadius=4; [cancel.heightAnchor constraintEqualToConstant:44].active=YES;
-    [cancel addTarget:self action:@selector(dismissSelf) forControlEvents:UIControlEventTouchUpInside];
-    self.enable=[GAButton primary:@"Enable flight" target:self action:@selector(go)]; self.enable.titleLabel.font=Sans(15,UIFontWeightBold); self.enable.height.constant=44;
-    self.enable.enabled=NO; self.enable.accessibilityIdentifier=@"flight.confirm";
-    [buttons addArrangedSubview:cancel]; [buttons addArrangedSubview:self.enable];
-    [body addArrangedSubview:Spacer(4)]; [body addArrangedSubview:buttons];
-    self.gateReason=Label(@"Waiting for current aircraft state.",Sans(12,UIFontWeightRegular),GA_STOP);
-    self.gateReason.accessibilityIdentifier=@"flight.reason";
-    [body addArrangedSubview:self.gateReason];
-    GAButton *stop=[GAButton primary:@"STOP AI" target:self action:@selector(stopPressed)];
-    stop.fill=GA_STOP; stop.pressedFill=GA_STOP_PRESS; stop.enabled=self.stopAI!=nil;
-    stop.accessibilityIdentifier=@"flight.stop"; stop.height.constant=56;
-    UIStackView *all=VStack(0); [all addArrangedSubview:top];
-    UIView *pad=[UIView new]; [pad addSubview:body]; Pin(body,pad,UIEdgeInsetsMake(12,20,20,20)); [all addArrangedSubview:pad];
-    [card addSubview:all]; Pin(all,card,UIEdgeInsetsZero);
-    UIScrollView *scroll=[UIScrollView new]; [self.view addSubview:scroll]; scroll.translatesAutoresizingMaskIntoConstraints=NO;
-    [self.view addSubview:stop]; stop.translatesAutoresizingMaskIntoConstraints=NO;
-    [NSLayoutConstraint activateConstraints:@[
-        [stop.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:16],
-        [stop.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-16],
-        [stop.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-10],
-        [scroll.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
-        [scroll.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [scroll.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [scroll.bottomAnchor constraintEqualToAnchor:stop.topAnchor constant:-10]]];
-    [scroll addSubview:card]; card.translatesAutoresizingMaskIntoConstraints=NO;
-    NSLayoutConstraint *center=[card.centerYAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.centerYAnchor]; center.priority=UILayoutPriorityDefaultLow;
-    [NSLayoutConstraint activateConstraints:@[
-        [card.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor constant:20],
-        [card.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor constant:-20],
-        [card.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-40],
-        [card.topAnchor constraintGreaterThanOrEqualToAnchor:scroll.contentLayoutGuide.topAnchor constant:20],
-        [card.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-20], center]];
-    __weak typeof(self) weakSelf=self;
-    self.gateTimer=[NSTimer scheduledTimerWithTimeInterval:0.25 repeats:YES block:^(NSTimer *timer){
-        if(weakSelf.readTelemetry) [weakSelf updateWithTelemetry:weakSelf.readTelemetry()];
-    }];
-    [[NSRunLoop mainRunLoop] addTimer:self.gateTimer forMode:NSRunLoopCommonModes];
-}
-// Live gate values from the bridge telemetry; a failing check turns red, shows ×, and disables confirm.
-- (void)updateWithTelemetry:(NSDictionary *)t {
-    if(!self.values) return;
-    double battery=[t[@"battery"] doubleValue], altitude=[t[@"altitude"] doubleValue], distance=[t[@"distanceFromHome"] doubleValue];
-    BOOL fresh=[t[@"positionFresh"] boolValue], batteryFresh=[t[@"batteryFresh"] boolValue];
-    BOOL ok[3]={batteryFresh && isfinite(battery) && battery>=30, fresh && isfinite(altitude) && altitude>=5 && altitude<=30, fresh && isfinite(distance) && distance>=0 && distance<=40};
-    NSString *text[3]={!batteryFresh || battery<0?@"—":[NSString stringWithFormat:@"%.0f%%",battery],!fresh?@"—":[NSString stringWithFormat:@"%.1f m",altitude],!fresh || distance<0?@"—":[NSString stringWithFormat:@"%.0f m",distance]};
-    BOOL all=YES;
-    for(int i=0;i<3;i++) {
-        self.values[i].text=text[i]; self.values[i].textColor=ok[i]?GA_INK:GA_STOP;
-        self.marks[i].image=[UIImage systemImageNamed:ok[i]?@"checkmark":@"xmark"]; self.marks[i].tintColor=ok[i]?GA_APPROVED:GA_STOP;
-        all=all && ok[i];
-    }
-    self.enable.enabled=all && GACanConfirmFlight(t);
-    self.gateReason.text=self.enable.enabled?([t[@"mock"] boolValue]?@"MOCK: simulated flight only. No aircraft will move.":@"Checks pass. Confirm only when the pilot is ready."):(t[@"flightBlockReason"]?:@"Waiting for current aircraft state.");
-    if(!self.enable.enabled && !self.gateReason.text.length) self.gateReason.text=@"Current flight checks do not pass.";
-    self.gateReason.textColor=self.enable.enabled?GA_SECONDARY:GA_STOP;
-}
-- (void)dismissSelf { [self dismissViewControllerAnimated:NO completion:nil]; }
-- (void)go {
-    NSDictionary *t=self.readTelemetry?self.readTelemetry():nil;
-    [self updateWithTelemetry:t];
-    if(!GACanConfirmFlight(t)) return;
-    void (^c)(void)=self.confirm;
-    [self dismissViewControllerAnimated:NO completion:^{ if(c) c(); }];
-}
-- (void)stopPressed { if(self.stopAI) self.stopAI(); [self dismissSelf]; }
-- (void)viewDidDisappear:(BOOL)animated { [super viewDidDisappear:animated]; [self.gateTimer invalidate]; self.gateTimer=nil; }
-@end
+// Flight enable is a direct local pilot action; bridge interlocks remain.
 
 // ---------------------------------------------------------------------------
 // Bridge (root). Header / status strip / scroll content / pinned STOP bar.
@@ -419,7 +305,6 @@ static UIView *NavyHeader(UIView *content) {
 // log
 @property(nonatomic,strong) UIStackView *logTail;
 @property(nonatomic,strong) UILabel *logCount;
-@property(nonatomic,weak) FlightConfirmViewController *confirm;
 @property(nonatomic,strong) NSDateFormatter *clock;
 @property(nonatomic,strong) UILabel *commandTitle;
 @property(nonatomic,strong) NSTimer *displayTimer;
@@ -586,7 +471,7 @@ static UIView *NavyHeader(UIView *content) {
     self.cameraHelp=Label(@"Optional camera check. Server can tilt the gimbal; aircraft flight stays with the pilot.",Sans(12,UIFontWeightRegular),GA_SECONDARY); self.cameraHelp.textAlignment=NSTextAlignmentCenter;
     self.flightButton=[GAButton primary:@"Enable flight" target:self action:@selector(flight)];
     self.flightButton.accessibilityIdentifier=@"bridge.flight";
-    self.flightHelp=Label(@"Aircraft airborne at 5–30 m, within 40 m of the anchor. You will confirm first.",Sans(12,UIFontWeightRegular),GA_SECONDARY); self.flightHelp.textAlignment=NSTextAlignmentCenter;
+    self.flightHelp=Label(@"Aircraft airborne at 5–30 m, within 40 m of the anchor. Tap Enable flight when ready.",Sans(12,UIFontWeightRegular),GA_SECONDARY); self.flightHelp.textAlignment=NSTextAlignmentCenter;
     self.commandRow=[UIView new]; UIStackView *cr=HStack(12);
     UIView *amber=[UIView new]; amber.backgroundColor=GA_CAUTION_DK; amber.layer.cornerRadius=5;
     [amber.widthAnchor constraintEqualToConstant:10].active=YES; [amber.heightAnchor constraintEqualToConstant:10].active=YES;
@@ -694,7 +579,7 @@ static UIView *NavyHeader(UIView *content) {
         if(i==0) detail=!started?@"Choose mock or live hardware":mock?@"Mock hardware · no aircraft":aircraft?@"Mavic Air 2 connected":@"Bridge started · waiting for aircraft";
         if(i==1) detail=self.address.text.length?self.address.text:@"Server origin";
         if(i==2) detail=flight?@"Camera included in flight mode":armed?@"Gimbal under server control":@"Optional camera check before flight";
-        if(i==3) detail=flight?@"Supervised control enabled":@"Stop camera control first · confirm before flight";
+        if(i==3) detail=flight?@"Supervised control enabled":@"Stop camera control first · then enable flight";
         [self.steps[i] setState:rowState detail:detail];
         if(i==2 && online && !armed) SetCaps(self.steps[i].statusTag,@"Optional",0.8);
         if(i==3 && (s==GAControlPending || s==GAReleaseFailed || s==GAReturning)) {
@@ -721,11 +606,11 @@ static UIView *NavyHeader(UIView *content) {
     } else {
         self.flightButton.hidden=NO; self.flightHelp.hidden=NO;
         self.takeoffButton.hidden=armed || [t[@"flying"] boolValue];
-        if(armed) self.flightHelp.text=@"Stop camera control, then tap Enable flight and confirm. This button only stops control.";
+        if(armed) self.flightHelp.text=@"Stop camera control, then tap Enable flight. This button only stops control.";
         else {
             self.cameraButton.hidden=NO; self.cameraHelp.hidden=NO;
             NSString *reason=![t[@"flying"] boolValue] && [t[@"takeoffBlockReason"] length]?t[@"takeoffBlockReason"]:t[@"flightBlockReason"];
-            self.flightHelp.text=reason.length?reason:@"Review current flight checks and confirm when the pilot is ready.";
+            self.flightHelp.text=reason.length?reason:@"Tap Enable flight when the pilot is ready.";
         }
     }
     [self.stopButton setAttributedTitle:[[NSAttributedString alloc] initWithString:takeoffBusy?@"STOP — CANCEL TAKEOFF":@"STOP AI — RETURN CONTROL TO PILOT" attributes:@{NSKernAttributeName:@(0.8),NSFontAttributeName:Sans(15,UIFontWeightHeavy),NSForegroundColorAttributeName:UIColor.whiteColor}] forState:UIControlStateNormal];
@@ -779,21 +664,14 @@ static UIView *NavyHeader(UIView *content) {
 - (void)flight {
     [self refreshState];
     if([self.telemetry[@"armed"] boolValue] && ![self.telemetry[@"flightEnabled"] boolValue]) {
-        [self.bridge stopAutomation:@"Camera control stopped locally; confirm separately to enable flight"];
+        [self.bridge stopAutomation:@"Camera control stopped locally; tap Enable flight to enable flight"];
         [self refreshState]; return;
     }
     if(!self.bridge || self.presentedViewController || [self.telemetry[@"flightEnabled"] boolValue]) return;
-    FlightConfirmViewController *c=[FlightConfirmViewController new];
-    c.modalPresentationStyle=UIModalPresentationOverFullScreen;
-    __weak typeof(self) weakSelf=self;
-    c.readTelemetry=^NSDictionary *{ return [weakSelf.bridge telemetry]; };
-    c.stopAI=^{ [weakSelf stop]; };
-    c.confirm=^{
-        if(GACanConfirmFlight([weakSelf.bridge telemetry])) [weakSelf.bridge armFlight:YES];
-        [weakSelf refreshState];
-    };
-    self.confirm=c;
-    [self presentViewController:c animated:NO completion:^{ [c updateWithTelemetry:weakSelf.telemetry]; }];
+    // The local tap is the pilot's explicit enable action. Recheck the live
+    // snapshot, then let DroneBridge independently validate and call DJI.
+    if(GACanConfirmFlight([self.bridge telemetry])) [self.bridge armFlight:YES];
+    [self refreshState];
 }
 - (void)stop { [self.bridge stopAutomation:@"Local STOP pressed; pilot control"]; [self refreshState]; }
 - (void)dealloc { [self.displayTimer invalidate]; }

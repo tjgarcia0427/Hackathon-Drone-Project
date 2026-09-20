@@ -1,5 +1,6 @@
 #import "DroneBridge.h"
 #import "Navigation.h"
+#import "GroundAnchor.h" // airborne anchor recovery
 #import "PilotTakeoff.h" // pilot takeoff integration
 #import "TelemetryDisplay.h" // display-only observations
 #import <DJISDK/DJISDK.h>
@@ -196,12 +197,16 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         if(!self->_homeSet && self->_gps && !state.isFlying) {
             self->_home=self->_pose; self->_homeSet=YES;
             [self note:@"Ground GPS anchor recorded. Restart server state before moving launch site."];
-        } else if(!self->_homeSet && self->_gps && state.isFlying && state.isHomeLocationSet && state.homeLocation && CLLocationCoordinate2DIsValid(state.homeLocation.coordinate)) {
-            // Reconnected while airborne (e.g. after a DJI Fly takeoff): adopt the aircraft's own DJI home point,
-            // the same reference its return-to-home uses, instead of waiting for a landing we cannot witness.
-            self->_home=(GAPose){state.homeLocation.coordinate.latitude,state.homeLocation.coordinate.longitude,0,self->_pose.heading}; self->_homeSet=YES;
-            [self note:@"Airborne: ground anchor taken from the aircraft's DJI home point."];
         }
+        // BEGIN airborne anchor recovery.
+        if(!self->_homeSet && state.homeLocation && CLLocationCoordinate2DIsValid(state.homeLocation.coordinate)) {
+            GAPose djiHome={state.homeLocation.coordinate.latitude,state.homeLocation.coordinate.longitude,0,0};
+            if(GARecoverAircraftHome(self->_gps,state.isFlying,state.isHomeLocationSet,self->_pose,djiHome,&self->_home)) {
+                self->_homeSet=YES;
+                [self note:@"Airborne: ground anchor recovered from the aircraft's DJI home point. Reconnect server, then tap Enable flight."];
+            }
+        }
+        // END airborne anchor recovery.
         if(self->_flightEnabled && !self->_returning && (state.flightMode==DJIFlightModeGoHome || state.flightMode==DJIFlightModeAutoLanding))
             [self stopAutomation:@"Aircraft has entered its own return/landing mode; pilot control"];
     });
@@ -348,7 +353,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     if(GATakeoffBusy(_pilotTakeoff)) return [self takeoffStatus]; // pilot takeoff integration
     double now=CACurrentMediaTime();
     if(!_mock && !self.fc) return @"No aircraft connection";
-    if(!_homeSet || !_gps || !GAValidPose(_pose)) return @"Need strong GPS and a ground anchor recorded before takeoff";
+    if(!_homeSet || !_gps || !GAValidPose(_pose)) return @"Need strong GPS and a ground anchor or live DJI home point within 40 m";
     if(now-_fcTime>1.5 || now-_batteryTime>5) return @"Aircraft telemetry is stale";
     if(_battery<30) return @"Battery must be at least 30% to enable flight";
     if(!_flying) return @"Pilot must use Take off or the RC, then climb to 5–30 m";
