@@ -87,3 +87,17 @@ On `ui-redesign`, the simulator harness adds `takeoff-ready`, `takeoff-confirm` 
 and DJIWidget libraries. These checks do not replace the first real aircraft test.
 
 DJI reference: [takeoff and cancellation API](https://developer.dji.com/api-reference/ios-api/Components/FlightController/DJIFlightController.html).
+
+## Validation record — September 20, 2026
+
+- Main implementation: `9b0c51910b060bfd45738929b9cdc80881e16881`.
+  [Main native tests and production iPhone build passed](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35525740287).
+- UI implementation: `99a7e5d5afaf32b041f699846c9f8433f526fed5`, with the
+  simulator runner's Unix line endings corrected in `aa6bef3da2ed8083e63ca5a6a8cceb14c5720e78`.
+  [All 17 UIKit scenarios and production iPhone build passed](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35525822568).
+  [UI branch native/dashboard checks and 44 server tests passed](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35525822397).
+- The native takeoff state-machine suite also passed locally on Windows. Preservation
+  checks confirm the existing video, navigation and command code outside the
+  explicitly allowed pilot-takeoff additions remains unchanged.
+- No command was sent to a real aircraft during implementation. Signed installation
+  and the first outdoor takeoff/hover/state-continuity check remain with the pilot.
