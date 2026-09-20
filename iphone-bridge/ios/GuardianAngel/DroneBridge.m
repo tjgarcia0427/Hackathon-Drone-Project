@@ -2,6 +2,7 @@
 #import "Navigation.h"
 #import <DJISDK/DJISDK.h>
 #import <DJIWidget/DJIVideoPreviewer.h>
+#import <DJIWidget/DJIVideoPreviewerAdapter.h>
 #import <QuartzCore/QuartzCore.h>
 #include <math.h>
 
@@ -26,6 +27,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
 @property(nonatomic,strong,readwrite) BridgeClient *client;
 @property(nonatomic,weak) UIView *preview;
 @property(nonatomic,strong) DJIFlightController *fc;
+@property(nonatomic,strong) DJIVideoPreviewerAdapter *videoAdapter; // selects the aircraft's H.264 profile and feeds the previewer
 @property(nonatomic,strong) DJIAircraft *aircraft;
 @property(nonatomic,strong) NSTimer *timer;
 @property(nonatomic,strong) NSDictionary *active;
@@ -60,7 +62,13 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         if(!key.length || [key containsString:@"REPLACE"]) [self note:@"Set DJI_APP_KEY in Config/Secrets.xcconfig first."];
         else [DJISDKManager registerAppWithDelegate:self];
         [[DJIVideoPreviewer instance] setView:self.preview];
+        [DJIVideoPreviewer instance].enableHardwareDecode=YES;
         [[DJIVideoPreviewer instance] start];
+        // DJI's sample uses the adapter: it registers on the primary video feed, sets the encoder type for the
+        // connected product (Mavic Air 2 included) and pushes data into the previewer. Without it the decoder
+        // never produces frames. Our own listener below only tracks feed freshness for snapshot timing.
+        self.videoAdapter=[DJIVideoPreviewerAdapter adapterWithDefaultSettings];
+        [self.videoAdapter start];
         [[DJISDKManager videoFeeder].primaryVideoFeed addListener:self withQueue:dispatch_get_main_queue()];
     }
     __weak typeof(self) weakSelf=self;
@@ -136,8 +144,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
 }
 - (void)videoFeed:(DJIVideoFeed *)videoFeed didUpdateVideoData:(NSData *)videoData {
     if(_closed || _mock) return;
-    _videoTime=CACurrentMediaTime();
-    [[DJIVideoPreviewer instance] push:(uint8_t *)videoData.bytes length:(int)videoData.length];
+    _videoTime=CACurrentMediaTime(); // the adapter pushes the bytes; pushing here too would double-feed the decoder
 }
 - (NSString *)flightProblem {
     double now=CACurrentMediaTime();
@@ -385,7 +392,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     [self stopAutomation:@"Bridge closed"]; _closed=YES;
     [self.client disconnect]; [self.timer invalidate]; self.timer=nil;
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-    if(!_mock) { [[DJISDKManager videoFeeder].primaryVideoFeed removeListener:self]; [[DJIVideoPreviewer instance] unSetView]; [[DJIVideoPreviewer instance] close]; }
+    if(!_mock) { [self.videoAdapter stop]; self.videoAdapter=nil; [[DJISDKManager videoFeeder].primaryVideoFeed removeListener:self]; [[DJIVideoPreviewer instance] unSetView]; [[DJIVideoPreviewer instance] close]; }
 }
 - (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
 @end
