@@ -10,7 +10,7 @@ Hackathon prototype for Claude Code Build Day, Miami, September 20, 2026. A Watc
 
 **The current implementation uses iPhone + DJI Mobile SDK V4 iOS. Android is no longer part of the build plan.** We use DJI's app SDK; aircraft firmware is not modified.
 
-**Status:** the native Watch app **compiles and links in Xcode CI**, its Swift core tests pass, and all 74 server tests pass. See [Watch validation](watch-app/VALIDATION.md). Signed installation and real GPS/motion/network tests on the team's SE remain. The iPhone bridge compiles and links with its pinned DJI libraries in macOS CI, and its telemetry/navigation tests pass. Lorenzo reported successful telemetry, gimbal control, live video and a mock mission on real hardware. The new telemetry fix still needs the [hardware bench check](docs/TELEMETRY_FIX.md).
+**Status:** the native Watch app **compiles and links in Xcode CI**, its Swift core tests pass, and all 95 server tests pass. See [Watch validation](watch-app/VALIDATION.md). Signed installation and real GPS/motion/network tests on the team's SE remain. The iPhone bridge compiles and links with its pinned DJI libraries in macOS CI, and its telemetry/navigation tests pass. Lorenzo reported successful telemetry, gimbal control, live video and a mock mission on real hardware. The new telemetry fix still needs the [hardware bench check](docs/TELEMETRY_FIX.md).
 
 ## How the pieces connect
 
@@ -97,7 +97,7 @@ The iPhone now has **Take off (pilot)** with local confirmation. Stay in Guardia
 
 ## Local tests and demo sequence
 
-Run `python -m unittest discover -s . -p "test_*.py" -v` from `server/` for provider, mission lifecycle and navigation checks. The ChatGPT subscription path has passed a real synthetic-image test and dashboard incident planning; Claude subscription and both API paths need live checks with your accounts. The current server suite has **74 tests** including Watch acknowledgment, retries, cancellation, location and dispatch checks. Visual search uses `AI_SEARCH_TIMEOUT` (default 30 seconds); frame-age rejection follows that timeout plus 5 seconds, preserving the teammate's current implementation. The CLI default model timed out on the full search check; `gpt-5.6-luna` passed in 7.05 seconds on this laptop. Repeat `--search-check` with your chosen model/network before a mission.
+Run `python -m unittest discover -s . -p "test_*.py" -v` from `server/` for provider, mission lifecycle and navigation checks. The ChatGPT subscription path has passed a real synthetic-image test and dashboard incident planning; Claude subscription and both API paths need live checks with your accounts. The current server suite has **95 tests** including Watch acknowledgment, retries, cancellation, location and dispatch checks. Visual search uses `AI_SEARCH_TIMEOUT` (default 30 seconds); frame-age rejection follows that timeout plus 5 seconds, preserving the teammate's current implementation. The CLI default model timed out on the full search check; `gpt-5.6-luna` passed in 7.05 seconds on this laptop. Repeat `--search-check` with your chosen model/network before a mission.
 
 
 1. **Watch alert-only test:** follow [WATCH_SETUP.md](docs/WATCH_SETUP.md), leave Test mode ON, and check a button alert, cancel, then a shake alert. No drone or AI account is needed for this stage.

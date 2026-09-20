@@ -156,3 +156,15 @@ The local plugin tests exercise registration contracts, image results, session i
 Implementation: `server/agent_api.py`, small ownership/control-status hooks in `server/app.py`, `integrations/openclaw/`, and marked agent takeoff additions in `DroneBridge.m` / `AppDelegate.m`. The existing OcuSync decoding assistance, encoder setup, software decoder and navigation loop are preserved by the repository's comparison check. Ground-anchor caching across an actual aircraft disconnect is not added.
 
 Primary OpenClaw references checked September 20, 2026: [building tools](https://docs.openclaw.ai/plugins/building-plugins), [plugin manifest](https://docs.openclaw.ai/plugins/manifest), [agent workspaces](https://docs.openclaw.ai/concepts/multi-agent), [Gateway environment](https://docs.openclaw.ai/help/environment). These SDK/config surfaces can change; runtime inspection is part of setup.
+
+### Recorded build results — September 20, 2026
+
+Implementation commits: main `69d983707f9fbb9dbdbeb6f14c4bb708f93dbc2c`; matching UI branch `0cb65eca78a92b4d3b8b0016b4afb1f4539d94e0`.
+
+- **95 server tests pass**, including 21 new agent API/lifecycle tests; **8 OpenClaw plugin tests pass**.
+- [Main native checks and real DJI iPhone build passed](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35527894867).
+- [Main server and Watch checks passed](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35527894876).
+- [UI branch native/server checks passed](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35527896746).
+- [UI branch real DJI build and all 18 UIKit simulator scenarios passed](https://github.com/tjgarcia0427/Hackathon-Drone-Project/actions/runs/35527896755), including the agent pilot prompt/dismissal scenario.
+
+Both branches execute the production takeoff-request methods in the native test harness: no automatic launch, approval, decline, expired/late approval, duplicate IDs, readiness revalidation, interruption and SDK rejection. Flight/video preservation checks also pass. These results do not substitute for the team's installed OpenClaw runtime, signed iPhone or real-aircraft validation described above.
