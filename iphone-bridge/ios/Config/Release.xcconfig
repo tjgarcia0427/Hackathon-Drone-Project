@@ -1,0 +1,14 @@
+#include? "../Pods/Target Support Files/Pods-GuardianAngel/Pods-GuardianAngel.release.xcconfig"
+#include "Secrets.xcconfig"
+IPHONEOS_DEPLOYMENT_TARGET = 15.0
+ENABLE_BITCODE = NO
+CLANG_ENABLE_MODULES = YES
+CLANG_ENABLE_OBJC_ARC = YES
+TARGETED_DEVICE_FAMILY = 1
+SUPPORTED_PLATFORMS = iphoneos
+SDKROOT = iphoneos
+CODE_SIGN_STYLE = Automatic
+INFOPLIST_FILE = GuardianAngel/Info.plist
+PRODUCT_NAME = GuardianAngel
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks
+OTHER_LDFLAGS = $(inherited) -ObjC
