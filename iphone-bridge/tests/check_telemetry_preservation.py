@@ -19,6 +19,10 @@ assert diagnostic in baseline
 baseline=baseline.replace(diagnostic,'')
 assert 'Video feed:' not in current
 
+# The agent may REQUEST local takeoff confirmation, with no raw launch/arm API.
+current=re.sub(r'// BEGIN agent takeoff request methods\..*?// END agent takeoff request methods\.\n\n','',current,count=1,flags=re.S)
+current=re.sub(r'^.*// agent takeoff integration\n','',current,flags=re.M)
+
 # Explicitly authorized local pilot-takeoff additions. The policy has native behavior tests.
 current=re.sub(r'// BEGIN pilot takeoff methods\..*?// END pilot takeoff methods\.\n\n','',current,count=1,flags=re.S)
 current=re.sub(r'^.*// pilot takeoff integration\n','',current,flags=re.M)

@@ -18,6 +18,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
 }
 @interface DroneBridge () <DJISDKManagerDelegate,DJIFlightControllerDelegate,DJIBatteryDelegate,DJIGimbalDelegate,DJIVideoFeedListener,DJIVideoPreviewerFrameControlDelegate> {
     GAPose _pose, _home, _target;
+    double _takeoffPromptDeadline; // agent takeoff integration
     GATakeoff _pilotTakeoff; NSUInteger _takeoffID, _takeoffCancelID; double _takeoffCancelTime; BOOL _motorsOn; DJIFlightMode _takeoffMode; // pilot takeoff integration
     GATelemetrySample _displaySample; // display-only observations
     BOOL _homeSet, _flying, _gps, _armed, _flightEnabled, _enabling, _mock, _closed;
@@ -33,6 +34,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
 @property(nonatomic,strong) DJIAircraft *aircraft;
 @property(nonatomic,strong) NSTimer *timer;
 @property(nonatomic,strong) NSDictionary *active;
+@property(nonatomic,strong) NSDictionary *remoteTakeoff; // agent takeoff integration
 @property(nonatomic,strong) NSMutableDictionary<NSString *,NSDictionary *> *acks;
 @property(nonatomic,strong) NSMutableArray<NSString *> *ackOrder;
 @end
@@ -219,6 +221,52 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
 - (void)decodingDidSucceedWithTimestamp:(uint32_t)timestamp { [[DJISDKManager videoFeeder].primaryVideoFeed decodingDidSucceedWithTimestamp:timestamp]; }
 - (void)decodingDidFail { [[DJISDKManager videoFeeder].primaryVideoFeed decodingDidFail]; }
 
+// BEGIN agent takeoff request methods.
+- (void)finishTakeoffRequest:(BOOL)ok error:(NSString *)error {
+    if(!self.remoteTakeoff) return;
+    NSString *identifier=self.remoteTakeoff[@"cmd_id"];
+    self.remoteTakeoff=nil; _takeoffPromptDeadline=0;
+    if(self.dismissTakeoffPrompt) self.dismissTakeoffPrompt();
+    [self ack:identifier ok:ok error:error];
+}
+- (void)requestPilotTakeoff:(NSDictionary *)cmd {
+    if([self.remoteTakeoff[@"cmd_id"] isEqual:cmd[@"cmd_id"]]) return;
+    NSString *problem=[self takeoffProblem];
+    if(self.remoteTakeoff || !self.takeoffPrompt || problem || !cmd[@"expires_at_ms"]) {
+        [self ack:cmd[@"cmd_id"] ok:NO error:problem?:@"Pilot confirmation unavailable or another request is active"]; return;
+    }
+    self.remoteTakeoff=cmd; _takeoffPromptDeadline=CACurrentMediaTime()+20;
+    NSString *identifier=cmd[@"cmd_id"];
+    __weak typeof(self) weakSelf=self;
+    [self note:@"Agent requested takeoff. Waiting up to 20 seconds for the pilot; nothing launches automatically."];
+    self.takeoffPrompt(identifier,^(BOOL approved){Main(^{
+        DroneBridge *s=weakSelf;
+        if(!s || ![s.remoteTakeoff[@"cmd_id"] isEqual:identifier] || !s->_takeoffPromptDeadline) return;
+        BOOL expired=CACurrentMediaTime()>s->_takeoffPromptDeadline;
+        s->_takeoffPromptDeadline=0;
+        if(!approved || expired) { [s finishTakeoffRequest:NO error:expired?@"Pilot confirmation expired":@"Pilot declined takeoff"]; return; }
+        NSString *issue=[s takeoffProblem];
+        if(issue) { [s finishTakeoffRequest:NO error:issue]; return; }
+        [s pilotTakeoff]; // same locally-confirmed takeoff path; never arms AI
+    });});
+}
+- (void)updateTakeoffRequest {
+    if(!self.remoteTakeoff) return;
+    if(_takeoffPromptDeadline) {
+        if(CACurrentMediaTime()>_takeoffPromptDeadline) [self finishTakeoffRequest:NO error:@"Pilot confirmation expired"];
+    } else if(!GATakeoffBusy(_pilotTakeoff)) {
+        [self finishTakeoffRequest:NO error:@"Takeoff did not complete; pilot must verify aircraft state"];
+    }
+}
+- (NSDictionary *)agentControlStatus {
+    NSString *problem=[self takeoffProblem];
+    return @{@"takeoff_request_supported":@YES,@"takeoff_ready":@(problem==nil && self.remoteTakeoff==nil),
+             @"takeoff_problem":problem?:@"",@"takeoff_pending":@(self.remoteTakeoff!=nil || GATakeoffBusy(_pilotTakeoff)),
+             @"camera_enabled":@(_armed),@"flight_enabled":@(_flightEnabled),
+             @"home":_homeSet?@[@(_home.lat),@(_home.lon)]:NSNull.null};
+}
+// END agent takeoff request methods.
+
 // BEGIN pilot takeoff methods.
 - (BOOL)pilotTakeoffBusy { return GATakeoffBusy(_pilotTakeoff); }
 - (GATakeoffObservation)takeoffObservation {
@@ -236,6 +284,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         .horizontalSpeed=_horizontalSpeed, .verticalSpeed=_verticalSpeed};
 }
 - (NSString *)takeoffProblem {
+    if(_takeoffPromptDeadline) return @"Answer the pending agent takeoff request"; // agent takeoff integration
     const char *problem=GATakeoffProblem(_pilotTakeoff,[self takeoffObservation]);
     return problem?[NSString stringWithUTF8String:problem]:nil;
 }
@@ -246,7 +295,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     return @"Taking off; AI flight control remains disabled";
 }
 - (void)pilotTakeoff {
-    // Recheck on the pilot's final confirmation; never accepted by the server command router.
+    // Recheck on the pilot's final confirmation; remote requests also require this local confirmation.
     NSString *problem=[self takeoffProblem];
     if(problem) { [self note:problem]; return; }
     GATakeoffBegin(&_pilotTakeoff,CACurrentMediaTime()); NSUInteger request=++_takeoffID;
@@ -284,6 +333,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         [self note:@"Takeoff timed out or live checks were lost; requesting cancellation. Use the RC."];
         [self cancelPilotTakeoff];
     } else if(event==GATakeoffComplete) {
+        [self finishTakeoffRequest:YES error:nil]; // agent takeoff integration
         [self note:@"Takeoff hover confirmed. Server and ground anchor retained. Use RC to climb to 5-30 m, then tap Enable flight separately."];
     }
 }
@@ -301,6 +351,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     return nil;
 }
 - (void)armFlight:(BOOL)flight {
+    if(self.remoteTakeoff) { [self note:@"Finish or cancel the pilot takeoff request first"]; return; } // agent takeoff integration
     if(GATakeoffBusy(_pilotTakeoff)) { [self note:[self takeoffStatus]]; return; } // pilot takeoff integration
     if(_closed || _enabling || _returning || _pendingSDKTransitions) { [self note:@"Wait for control transition / return to finish"]; return; }
     if(_releaseFailed) { [self note:@"Control release is unconfirmed. Use RC takeover, then press STOP to retry release."]; return; }
@@ -357,6 +408,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     });}];
 }
 - (void)stopAutomation:(NSString *)reason {
+    [self finishTakeoffRequest:NO error:reason]; // agent takeoff integration
     [self cancelPilotTakeoff]; // pilot takeoff integration
     BOOL hadControl=_flightEnabled || _enabling || _releaseFailed;
     ++_generation; _armed=NO; _flightEnabled=NO; _enabling=NO;
@@ -386,6 +438,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     if(![identifier isKindOfClass:NSString.class] || !identifier.length || identifier.length>128) return;
     if(self.acks[identifier]) { [self.client send:self.acks[identifier]]; return; }
     if([self.active[@"cmd_id"] isEqual:identifier]) return;
+    if([self.remoteTakeoff[@"cmd_id"] isEqual:identifier]) return; // agent takeoff integration
     if(![action isKindOfClass:NSString.class]) { [self ack:identifier ok:NO error:@"Missing action"]; return; }
     if(cmd[@"expires_at_ms"]) {
         double expires;
@@ -394,6 +447,8 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         }
     }
     if([action isEqual:@"stop"]) { [self stopAutomation:@"Server requested stop; pilot control"]; [self ack:identifier ok:YES error:nil]; return; }
+    if([action isEqual:@"request_takeoff"]) { [self requestPilotTakeoff:cmd]; return; } // agent takeoff integration
+    if(self.remoteTakeoff) { [self ack:identifier ok:NO error:@"Pilot takeoff request pending"]; return; } // agent takeoff integration
     if(!_armed) { [self ack:identifier ok:NO error:@"Local control is disabled"]; return; }
     BOOL hold=[action isEqual:@"hold"], rtl=[action isEqual:@"rtl"];
     if(self.active && !hold && !rtl) { [self ack:identifier ok:NO error:@"Another command is active"]; return; }
@@ -457,6 +512,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     double now=CACurrentMediaTime(), gap=now-_lastTick; _lastTick=now;
     if(_mock) _fcTime=_batteryTime=_gimbalTime=now;
     [self updatePilotTakeoff]; // pilot takeoff integration
+    [self updateTakeoffRequest]; // agent takeoff integration
     if(_enabling && now-_enableTime>5) [self stopAutomation:@"Timed out enabling flight control"];
     if(_armed || _flightEnabled) {
         NSString *problem=nil;
@@ -501,9 +557,9 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         NSDictionary *readout=[self aircraftReadout];
         NSString *status=_returning?@"rtl":self.active?@"searching":@"idle";
         if(_gps && _homeSet && GAValidPose(_pose) && now-_fcTime<1.5 && now-_batteryTime<5 && _battery>=0)
-            [self.client send:@{@"type":@"telemetry",@"drone_id":@"air2",@"latitude":@(_pose.lat),@"longitude":@(_pose.lon),@"altitude_m":@(_pose.altitude),@"heading_deg":@(fmod(_pose.heading+360,360)),@"gimbal_pitch_deg":@(_gimbal),@"battery_pct":@(_battery),@"status":status,@"home_latitude":@(_home.lat),@"home_longitude":@(_home.lon),@"aircraft":readout}];
+            [self.client send:@{@"type":@"telemetry",@"drone_id":@"air2",@"latitude":@(_pose.lat),@"longitude":@(_pose.lon),@"altitude_m":@(_pose.altitude),@"heading_deg":@(fmod(_pose.heading+360,360)),@"gimbal_pitch_deg":@(_gimbal),@"battery_pct":@(_battery),@"status":status,@"home_latitude":@(_home.lat),@"home_longitude":@(_home.lon),@"aircraft":readout,@"control":[self agentControlStatus]}];
         else
-            [self.client send:@{@"type":@"aircraft_status",@"aircraft":readout}];
+            [self.client send:@{@"type":@"aircraft_status",@"aircraft":readout,@"control":[self agentControlStatus]}];
         NSString *(^value)(NSString *,NSString *)=^NSString *(NSString *key,NSString *format) {
             id number=readout[key]; return [number isKindOfClass:NSNumber.class]?[NSString stringWithFormat:format,[number doubleValue]]:@"—";
         };

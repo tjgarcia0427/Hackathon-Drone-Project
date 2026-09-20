@@ -40,6 +40,19 @@ static void Run(void) {
     NSMutableDictionary *state=[bridge valueForKey:@"testState"];
     if(![scenario isEqual:@"offline"]) Click(root,@"connectButton");
     Invoke(root,@"refreshState");
+    if([scenario isEqual:@"agent-takeoff-prompt"]) {
+        __block NSUInteger responses=0;
+        Check(bridge.takeoffPrompt!=nil,@"Agent takeoff prompt must be wired");
+        bridge.takeoffPrompt(@"test-request",^(BOOL approved){responses++;});
+        Later(^{
+            Check([root.presentedViewController isKindOfClass:UIAlertController.class],@"Agent must present a pilot confirmation");
+            Check([root.presentedViewController.title isEqual:@"Agent requests takeoff"],@"Agent request must be distinguished from local launch");
+            Check(responses==0 && [[bridge valueForKey:@"takeoffRequests"] integerValue]==0,@"Presenting request must not launch or approve");
+            Check(bridge.client.connected && [state[@"homeSet"] boolValue],@"Request must retain server and anchor");
+            bridge.dismissTakeoffPrompt();
+            Later(^{ Check(root.presentedViewController==nil,@"Expired/cancelled request must dismiss"); Result(YES,@"Agent pilot prompt and dismissal passed; no launch"); });
+        }); return;
+    }
     if([scenario hasPrefix:@"takeoff-"]) {
         state[@"mock"]=@NO; state[@"flying"]=@NO; state[@"altitude"]=@0; state[@"displayAltitude"]=@0;
         Invoke(root,@"refreshState");

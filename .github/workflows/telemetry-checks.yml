@@ -29,6 +29,8 @@ jobs:
           fetch-depth: 0
       - name: Verify flight and video preservation
         run: python3 iphone-bridge/tests/check_telemetry_preservation.py
+      - name: Test production agent takeoff confirmation methods
+        run: python3 iphone-bridge/tests/agent_takeoff_request_test.py
       - name: Test native observations and navigation limits
         run: |
           xcrun clang -fobjc-arc -framework Foundation -Iiphone-bridge/ios/GuardianAngel iphone-bridge/tests/telemetry_display_test.m -o /tmp/telemetry_display_test
