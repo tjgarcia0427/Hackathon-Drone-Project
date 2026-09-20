@@ -323,7 +323,7 @@ async def run_mission() -> None:
                 planner.next_search_step, S.drone, S.latest_frame, S.latest_detection,
                 S.history, plan.target_lat, plan.target_lng,
             ), planner.search_timeout())
-            if not iphone_telemetry_ready() or time.monotonic() - frame_at > 10.0:
+            if not iphone_telemetry_ready() or time.monotonic() - frame_at > planner.search_timeout() + 5.0:
                 raise RuntimeError("planner result based on stale frame/telemetry")
             verdict = safety.check_step(step, S.drone, *home, step_no)
             desc = f"step {step_no + 1}: {step.action} {step.model_dump(exclude_none=True, exclude={'action', 'observation'})} — {step.observation}"

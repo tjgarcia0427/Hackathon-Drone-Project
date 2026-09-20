@@ -280,7 +280,9 @@ def generate(settings: Settings, model: type[BaseModel], system: str, prompt: st
                 else:
                     argv = cli_command(provider) + ["-p", "--safe-mode", "--tools", "",
                         "--disallowedTools", "mcp__*", "--permission-mode", "dontAsk",
-                        "--no-session-persistence", "--input-format", "stream-json", "--output-format", "json",
+                        # Claude Code: stream-json input requires stream-json output, which requires --verbose.
+                        "--no-session-persistence", "--verbose", "--input-format", "stream-json",
+                        "--output-format", "stream-json",
                         "--json-schema", json.dumps(schema), "--system-prompt-file", str(root / "system.txt")]
                     if settings.effective_model:
                         argv += ["--model", settings.effective_model]
@@ -288,7 +290,19 @@ def generate(settings: Settings, model: type[BaseModel], system: str, prompt: st
                     if encoded:
                         content.insert(0, {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": encoded}})
                     message = {"type": "user", "message": {"role": "user", "content": content}, "parent_tool_use_id": None}
-                    result = json.loads(run_cli(argv, json.dumps(message) + "\n", root, remaining, subscription_environment()))
+                    output = run_cli(argv, json.dumps(message) + "\n", root, remaining, subscription_environment())
+                    # stream-json emits one JSON event per line; the final "result" event carries structured_output.
+                    result: dict = {}
+                    for line in output.splitlines():
+                        line = line.strip()
+                        if not line.startswith("{"):
+                            continue
+                        try:
+                            event = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if event.get("type") == "result":
+                            result = event
                     if result.get("is_error") or result.get("subtype") != "success":
                         raise AIError("Claude Code did not complete a structured decision")
                     value = result.get("structured_output")

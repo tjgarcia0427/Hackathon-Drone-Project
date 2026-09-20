@@ -9,6 +9,8 @@ Select AI_PROVIDER / AI_MODEL or use the dashboard before an incident. See docs/
 """
 from __future__ import annotations
 
+import os
+
 import ai_backends
 
 from models import DroneState, FallEvent, MissionPlan, SearchStep
@@ -36,8 +38,9 @@ def configure(provider: str, model: str = "") -> dict:
 
 
 def search_timeout() -> float:
-    # Leave margin for transport and validation inside the 10-second frame age check.
-    return 8.0
+    # CLI providers (Claude Code / Codex) spawn a process per decision: ~5-15 s. API providers are faster.
+    # The aircraft is holding still while the decision is made; app.py's frame-age window tracks this value.
+    return float(os.environ.get("AI_SEARCH_TIMEOUT", "30"))
 
 
 def plan_timeout() -> float:
