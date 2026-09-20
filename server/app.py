@@ -395,6 +395,35 @@ async def state() -> dict:
     return S.snapshot()
 
 
+@app.post("/dev/cmd")
+async def dev_cmd(body: dict) -> dict:
+    """Bench harness: send ONE raw command to the connected bridge, bypassing the mission runner.
+
+    Enabled only with DEV_COMMANDS=1. Intended for props-off checks (gimbal, hold, stop) where GPS is
+    unavailable and a full dispatch would be refused. Limited to non-navigation actions.
+    """
+    if os.environ.get("DEV_COMMANDS", "0") != "1":
+        raise HTTPException(403, "set DEV_COMMANDS=1 to enable the bench command endpoint")
+    if S.search_task and not S.search_task.done():
+        raise HTTPException(409, "mission active; dev commands disabled")
+    action = str(body.get("action", ""))
+    allowed = {"gimbal", "hold", "stop", "yaw"}
+    if action not in allowed:
+        raise HTTPException(400, f"action must be one of {sorted(allowed)}")
+    params = {k: v for k, v in body.items() if k != "action"}
+    if action == "gimbal" and not (isinstance(params.get("pitch"), (int, float)) and -90 <= params["pitch"] <= 0):
+        raise HTTPException(400, "gimbal needs pitch -90..0")
+    if action == "yaw" and not (isinstance(params.get("deg"), (int, float)) and -180 <= params["deg"] <= 180):
+        raise HTTPException(400, "yaw needs deg -180..180")
+    try:
+        ack = await send_cmd(action, timeout=25, **params)
+    except Exception as e:  # noqa: BLE001
+        log(f"dev cmd {action} failed: {e}")
+        return {"ok": False, "error": str(e)}
+    log(f"dev cmd {action} {params} acked")
+    return {"ok": True, "ack": ack}
+
+
 @app.post("/reset")
 async def reset() -> dict:
     S.watch.update(S.watch_event_id, "cancelled", "Operator reset this mission")
