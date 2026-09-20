@@ -40,6 +40,30 @@ static void Run(void) {
     NSMutableDictionary *state=[bridge valueForKey:@"testState"];
     if(![scenario isEqual:@"offline"]) Click(root,@"connectButton");
     Invoke(root,@"refreshState");
+    if([scenario hasPrefix:@"takeoff-"]) {
+        state[@"mock"]=@NO; state[@"flying"]=@NO; state[@"altitude"]=@0; state[@"displayAltitude"]=@0;
+        Invoke(root,@"refreshState");
+        UIButton *takeoff=[root valueForKey:@"takeoffButton"];
+        Check(takeoff.enabled && !takeoff.hidden,@"Ready ground state must offer pilot takeoff");
+        if([scenario isEqual:@"takeoff-confirm"]) {
+            Click(root,@"takeoffButton");
+            Later(^{
+                Check([root.presentedViewController isKindOfClass:UIAlertController.class],@"Pilot must get a separate confirmation");
+                Check([[bridge valueForKey:@"takeoffRequests"] integerValue]==0,@"Opening confirmation must not launch");
+                Check(bridge.client.connected && [state[@"homeSet"] boolValue],@"Opening confirmation must retain connection and anchor");
+                Result(YES,@"Pilot takeoff confirmation preserves state and does not launch automatically");
+            }); return;
+        }
+        if([scenario isEqual:@"takeoff-pending"]) {
+            [bridge pilotTakeoff]; Invoke(root,@"refreshState");
+            Check([[bridge valueForKey:@"takeoffRequests"] integerValue]==1,@"Exactly one mock takeoff");
+            Check(bridge.client.connected && [state[@"homeSet"] boolValue],@"Takeoff must retain server and ground anchor");
+            Check(![state[@"armed"] boolValue] && ![state[@"flightEnabled"] boolValue],@"Takeoff must not enable AI");
+            Check(![[root valueForKey:@"flightButton"] isEnabled],@"Flight control must be blocked during takeoff");
+            [bridge pilotTakeoff]; Check([[bridge valueForKey:@"takeoffRequests"] integerValue]==1,@"Duplicate launch blocked");
+        }
+        Later(^{ Result(YES,[scenario stringByAppendingString:@" passed"]); }); return;
+    }
     if(![scenario isEqual:@"flow"]) {
         if([scenario isEqual:@"camera"] || [scenario isEqual:@"procedure"]) Click(root,@"cameraButton");
         if([scenario isEqual:@"flight"]) { state[@"mock"]=@NO; state[@"armed"]=@YES; state[@"flightEnabled"]=@YES; }

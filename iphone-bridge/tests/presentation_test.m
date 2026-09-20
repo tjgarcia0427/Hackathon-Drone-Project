@@ -8,7 +8,7 @@ int main(void) { @autoreleasepool {
         @"flying":@YES,@"battery":@78,@"altitude":@10,@"distanceFromHome":@3,@"flightBlockReason":@""} mutableCopy];
     assert(!GACanConfirmFlight(nil)); assert(!GACanConfirmFlight(@{}));
     assert(GACanConfirmFlight(t)); assert(GAStateForTelemetry(t)==GAMock);
-    for(NSString *flag in @[@"armed",@"flightEnabled",@"enabling",@"returning",@"releaseFailed",@"pendingTransitions"]) {
+    for(NSString *flag in @[@"takeoffBusy",@"armed",@"flightEnabled",@"enabling",@"returning",@"releaseFailed",@"pendingTransitions"]) {
         t[flag]=@YES; assert(!GACanConfirmFlight(t)); [t removeObjectForKey:flag];
     }
     for(NSString *flag in @[@"started",@"serverOnline",@"aircraft",@"telemetryFresh",@"positionFresh",@"batteryFresh",@"gps",@"homeSet",@"flying"]) {

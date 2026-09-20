@@ -16,7 +16,7 @@
 @interface DroneBridge ()
 @property(nonatomic,strong,readwrite) BridgeClient *client;
 @property(nonatomic,strong) NSMutableDictionary *testState;
-@property(nonatomic) NSUInteger flightRequests, stopRequests;
+@property(nonatomic) NSUInteger flightRequests, stopRequests, takeoffRequests;
 @end
 @implementation DroneBridge
 - (instancetype)initWithPreview:(UIView *)preview mock:(BOOL)mock {
@@ -39,10 +39,24 @@
     else if([self.testState[@"pendingTransitions"] integerValue] || [self.testState[@"returning"] boolValue]) problem=@"Wait for the control transition";
     else if(![self.testState[@"telemetryFresh"] boolValue]) problem=@"Aircraft telemetry is stale";
     else if([self.testState[@"battery"] doubleValue]<30) problem=@"Battery must be at least 30% to enable flight";
+    if([self.testState[@"takeoffBusy"] boolValue]) problem=@"Takeoff pending";
+    self.testState[@"takeoffBlockReason"]=[self takeoffProblem]?:@"";
     self.testState[@"flightBlockReason"]=problem;
     return self.testState.copy;
 }
 - (void)start { self.testState[@"started"]=@YES; if(self.log) self.log(@"UI harness — simulated state only; no DJI connection"); }
+- (BOOL)pilotTakeoffBusy { return [self.testState[@"takeoffBusy"] boolValue]; }
+- (NSString *)takeoffProblem {
+    if(!self.client.connected || ![self.testState[@"telemetryFresh"] boolValue] || ![self.testState[@"gps"] boolValue] ||
+       ![self.testState[@"homeSet"] boolValue] || [self.testState[@"flying"] boolValue] || [self.testState[@"armed"] boolValue] ||
+       [self.testState[@"takeoffBusy"] boolValue]) return @"Takeoff checks do not pass";
+    return nil;
+}
+- (void)pilotTakeoff {
+    if([self takeoffProblem]) return;
+    self.takeoffRequests++; self.testState[@"takeoffBusy"]=@YES;
+    self.testState[@"takeoffStatus"]=@"Taking off; AI flight control remains disabled";
+}
 - (void)armFlight:(BOOL)flight {
     if([self.testState[@"armed"] boolValue]) { if(self.log) self.log(@"Stop AI control before changing control mode"); return; }
     self.testState[@"armed"]=@YES; self.testState[@"flightEnabled"]=@(flight);

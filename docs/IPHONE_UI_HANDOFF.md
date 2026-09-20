@@ -71,3 +71,7 @@ Main also received the teammate's app-icon commit `da36a46`. This UI branch does
 ## Design reference
 
 The written `UI_REDESIGN_SPEC.md` is available. The HTML prototype and runtime assets were not in the fetched repository when this work began. Use its accepted turn 2 (`#2a`) when supplied; operational truth and the above interlocks take precedence over decorative sample values. Do not import the rejected turn 1 design tokens.
+
+## Pilot takeoff addition
+
+Both branches now include the explicitly authorized local **Take off (pilot)** action; this is a functional addition beyond the original presentation-only scope. See [pilot takeoff](PILOT_TAKEOFF.md). The decoder and navigation limits remain unchanged. The redesigned screen exposes launch confirmation, pending/cancellation status and STOP, with three additional simulator scenarios. Rebuild the branch you are testing; do not merge the UI branch just to obtain takeoff on main.

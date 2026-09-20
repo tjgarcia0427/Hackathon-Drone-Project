@@ -35,6 +35,8 @@ jobs:
           /tmp/telemetry_display_test
           xcrun clang iphone-bridge/tests/navigation_test.c iphone-bridge/ios/GuardianAngel/Navigation.c -lm -o /tmp/navigation_test
           /tmp/navigation_test
+          xcrun clang -std=c11 -Wall -Wextra -Werror -Iiphone-bridge/ios/GuardianAngel iphone-bridge/tests/pilot_takeoff_test.c -lm -o /tmp/pilot_takeoff_test
+          /tmp/pilot_takeoff_test
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

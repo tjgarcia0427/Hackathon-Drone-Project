@@ -10,7 +10,7 @@ typedef NS_ENUM(NSInteger, GAOpState) {
 static inline GAOpState GAStateForTelemetry(NSDictionary *t) {
     if(![t[@"started"] boolValue]) return GANotStarted;
     if([t[@"releaseFailed"] boolValue]) return GAReleaseFailed;
-    if([t[@"enabling"] boolValue] || [t[@"pendingTransitions"] unsignedIntegerValue]>0) return GAControlPending;
+    if([t[@"takeoffBusy"] boolValue] || [t[@"enabling"] boolValue] || [t[@"pendingTransitions"] unsignedIntegerValue]>0) return GAControlPending;
     if([t[@"returning"] boolValue]) return GAReturning;
     if([t[@"flightEnabled"] boolValue]) return GAFlight;
     if([t[@"armed"] boolValue]) return GACameraOnly;
@@ -23,7 +23,7 @@ static inline BOOL GACanConfirmFlight(NSDictionary *t) {
     // A missing snapshot or reason is unknown, never a passing check.
     if(![reason isKindOfClass:NSString.class] || reason.length) return NO;
     if(![t[@"started"] boolValue] || ![t[@"serverOnline"] boolValue] || ![t[@"aircraft"] boolValue]) return NO;
-    if([t[@"armed"] boolValue] || [t[@"flightEnabled"] boolValue] || [t[@"enabling"] boolValue] ||
+    if([t[@"takeoffBusy"] boolValue] || [t[@"armed"] boolValue] || [t[@"flightEnabled"] boolValue] || [t[@"enabling"] boolValue] ||
        [t[@"returning"] boolValue] || [t[@"releaseFailed"] boolValue] || [t[@"pendingTransitions"] unsignedIntegerValue]) return NO;
     if(![t[@"telemetryFresh"] boolValue] || ![t[@"positionFresh"] boolValue] || ![t[@"batteryFresh"] boolValue] ||
        ![t[@"gps"] boolValue] || ![t[@"homeSet"] boolValue] || ![t[@"flying"] boolValue]) return NO;

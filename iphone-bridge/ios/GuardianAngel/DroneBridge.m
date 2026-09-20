@@ -1,5 +1,6 @@
 #import "DroneBridge.h"
 #import "Navigation.h"
+#import "PilotTakeoff.h" // pilot takeoff integration
 #import "TelemetryDisplay.h" // display-only observations
 #import <DJISDK/DJISDK.h>
 #import <DJIWidget/DJIVideoPreviewer.h>
@@ -17,6 +18,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
 }
 @interface DroneBridge () <DJISDKManagerDelegate,DJIFlightControllerDelegate,DJIBatteryDelegate,DJIGimbalDelegate,DJIVideoFeedListener,DJIVideoPreviewerFrameControlDelegate> {
     GAPose _pose, _home, _target;
+    GATakeoff _pilotTakeoff; NSUInteger _takeoffID, _takeoffCancelID; double _takeoffCancelTime; BOOL _motorsOn; DJIFlightMode _takeoffMode; // pilot takeoff integration
     GATelemetrySample _displaySample; // display-only observations
     BOOL _homeSet, _flying, _gps, _armed, _flightEnabled, _enabling, _mock, _closed;
     BOOL _snapshotPending, _returning, _rthAccepted, _releaseFailed;
@@ -82,6 +84,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
              @"distanceFromHome":@(poseFresh?GADistance(_pose.lat,_pose.lon,_home.lat,_home.lon):-1),
              @"armed":@(_armed), @"flightEnabled":@(_flightEnabled), @"enabling":@(_enabling),
              @"returning":@(_returning), @"releaseFailed":@(_releaseFailed),
+             @"takeoffBusy":@(GATakeoffBusy(_pilotTakeoff)), @"takeoffStatus":[self takeoffStatus], @"takeoffBlockReason":[self takeoffProblem]?:@"",
              @"pendingTransitions":@(_pendingSDKTransitions), @"flightBlockReason":blocked?:@"",
              @"telemetryAt":@(_fcTime>0 ? NSDate.date.timeIntervalSince1970-(now-_fcTime) : 0),
              @"command":action?[NSString stringWithFormat:@"%@ (%@)",action,identifier?:@"?"]:@""};
@@ -133,6 +136,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     Main(^{
         if(self->_closed) return;
         [self stopAutomation:@"Aircraft connected; local control must be enabled again"];
+        self->_pilotTakeoff=(GATakeoff){0}; ++self->_takeoffID; // pilot takeoff integration
         self->_homeSet=NO; self->_fcTime=0; self->_batteryTime=0;
         self.fc.delegate=nil; self.aircraft.battery.delegate=nil; self.aircraft.gimbal.delegate=nil;
         self.fc=nil; self.aircraft=nil; self->_gps=NO; self->_gimbalTime=0;
@@ -156,6 +160,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         DJIFlightController *controller=self.aircraft.flightController;
         if(controller!=self.fc) {
             [self stopAutomation:@"Flight controller component changed"];
+            self->_pilotTakeoff=(GATakeoff){0}; ++self->_takeoffID; // pilot takeoff integration
             self->_homeSet=NO; self->_fcTime=0; self.fc.delegate=nil; self.fc=controller;
         }
         self.fc.delegate=self; self.aircraft.battery.delegate=self; self.aircraft.gimbal.delegate=self;
@@ -165,6 +170,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     Main(^{
         [self stopAutomation:@"Aircraft disconnected"];
         self.fc.delegate=nil; self.aircraft.battery.delegate=nil; self.aircraft.gimbal.delegate=nil;
+        self->_pilotTakeoff=(GATakeoff){0}; ++self->_takeoffID; // pilot takeoff integration
         self.fc=nil; self.aircraft=nil; self->_fcTime=0; self->_homeSet=NO;
         self->_gps=NO; self->_gimbalTime=0;
     });
@@ -182,6 +188,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         self->_gps=location && CLLocationCoordinate2DIsValid(location.coordinate) && state.GPSSignalLevel>=DJIGPSSignalLevel4 && state.GPSSignalLevel<=DJIGPSSignalLevel5;
         if(self->_gps) self->_pose=(GAPose){location.coordinate.latitude,location.coordinate.longitude,state.altitude,state.attitude.yaw};
         self->_flying=state.isFlying;
+        self->_motorsOn=state.areMotorsOn; self->_takeoffMode=state.flightMode; // pilot takeoff integration
         self->_horizontalSpeed=hypot(state.velocityX,state.velocityY); self->_verticalSpeed=fabs(state.velocityZ);
         self->_fcTime=CACurrentMediaTime();
         if(!self->_homeSet && self->_gps && !state.isFlying) {
@@ -212,17 +219,89 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
 - (void)decodingDidSucceedWithTimestamp:(uint32_t)timestamp { [[DJISDKManager videoFeeder].primaryVideoFeed decodingDidSucceedWithTimestamp:timestamp]; }
 - (void)decodingDidFail { [[DJISDKManager videoFeeder].primaryVideoFeed decodingDidFail]; }
 
+// BEGIN pilot takeoff methods.
+- (BOOL)pilotTakeoffBusy { return GATakeoffBusy(_pilotTakeoff); }
+- (GATakeoffObservation)takeoffObservation {
+    double now=CACurrentMediaTime();
+    BOOL autoFlight=_takeoffMode==DJIFlightModeAutoTakeoff || _takeoffMode==DJIFlightModeAssistedTakeoff ||
+        _takeoffMode==DJIFlightModeGoHome || _takeoffMode==DJIFlightModeAutoLanding;
+    return (GATakeoffObservation){
+        .foreground=!_closed && _lastTick>0 && UIApplication.sharedApplication.applicationState==UIApplicationStateActive,
+        .connected=self.client.connected && now-self.client.lastPong<4,
+        .aircraft=_mock || self.fc!=nil, .gps=_gps && GAValidPose(_pose), .anchor=_homeSet && GAValidPose(_home),
+        .flying=_flying, .motorsOn=_motorsOn, .autoFlight=autoFlight,
+        .aiBusy=_armed || _flightEnabled || _enabling || _returning || _releaseFailed || _pendingSDKTransitions || self.active!=nil,
+        .now=now, .fcTime=_fcTime, .batteryTime=_batteryTime, .battery=_battery, .altitude=_pose.altitude,
+        .distance=GADistance(_pose.lat,_pose.lon,_home.lat,_home.lon),
+        .horizontalSpeed=_horizontalSpeed, .verticalSpeed=_verticalSpeed};
+}
+- (NSString *)takeoffProblem {
+    const char *problem=GATakeoffProblem(_pilotTakeoff,[self takeoffObservation]);
+    return problem?[NSString stringWithUTF8String:problem]:nil;
+}
+- (NSString *)takeoffStatus {
+    if(_pilotTakeoff.cancelPending) return @"Cancelling takeoff; keep the RC ready";
+    if(_pilotTakeoff.uncertain) return @"Takeoff outcome unconfirmed; use RC / STOP to retry cancellation";
+    if(_pilotTakeoff.interrupted && _pilotTakeoff.startPending) return @"Waiting for interrupted takeoff response; use RC";
+    return @"Taking off; AI flight control remains disabled";
+}
+- (void)pilotTakeoff {
+    // Recheck on the pilot's final confirmation; never accepted by the server command router.
+    NSString *problem=[self takeoffProblem];
+    if(problem) { [self note:problem]; return; }
+    GATakeoffBegin(&_pilotTakeoff,CACurrentMediaTime()); NSUInteger request=++_takeoffID;
+    [self note:@"Pilot requested takeoff. Server connection and ground anchor retained; AI remains disabled."];
+    if(_mock) { GATakeoffStartResult(&_pilotTakeoff,false); _motorsOn=YES; _flying=YES; _pose.altitude=1.2; return; }
+    DJIFlightController *controller=self.fc;
+    [controller startTakeoffWithCompletion:^(NSError *error){Main(^{
+        if(request!=self->_takeoffID || controller!=self.fc || self->_closed) return;
+        BOOL cancelAgain=GATakeoffStartResult(&self->_pilotTakeoff,error!=nil);
+        if(error) [self note:[@"DJI takeoff response: " stringByAppendingString:error.localizedDescription]];
+        else if(!self->_pilotTakeoff.interrupted) [self note:@"DJI accepted takeoff; waiting for fresh telemetry confirming a stable hover."];
+        if(cancelAgain) [self cancelPilotTakeoff];
+    });}];
+}
+- (void)cancelPilotTakeoff {
+    if(!GATakeoffRequestCancel(&_pilotTakeoff)) return;
+    [self note:@"Takeoff cancellation requested. Keep the RC ready; this does not stop motors or land the aircraft."];
+    if(_mock) { GATakeoffCancelResult(&_pilotTakeoff,false); return; }
+    DJIFlightController *controller=self.fc; NSUInteger request=_takeoffID, cancellation=++_takeoffCancelID;
+    _takeoffCancelTime=CACurrentMediaTime();
+    if(!controller) { GATakeoffCancelResult(&_pilotTakeoff,true); return; }
+    [controller cancelTakeoffWithCompletion:^(NSError *error){Main(^{
+        if(request!=self->_takeoffID || cancellation!=self->_takeoffCancelID || controller!=self.fc || self->_closed) return;
+        GATakeoffCancelResult(&self->_pilotTakeoff,error!=nil);
+        [self note:error?[@"Takeoff cancellation unconfirmed; use RC, press STOP to retry: " stringByAppendingString:error.localizedDescription]:@"DJI confirmed takeoff cancellation. Pilot control; AI remains disabled."];
+    });}];
+}
+- (void)updatePilotTakeoff {
+    if(_pilotTakeoff.cancelPending && CACurrentMediaTime()-_takeoffCancelTime>5) {
+        ++_takeoffCancelID; GATakeoffCancelResult(&_pilotTakeoff,true);
+        [self note:@"Takeoff cancellation timed out. Use RC; press STOP to retry. AI remains disabled."];
+    }
+    GATakeoffEvent event=GATakeoffObserve(&_pilotTakeoff,[self takeoffObservation]);
+    if(event==GATakeoffCancelRequired) {
+        [self note:@"Takeoff timed out or live checks were lost; requesting cancellation. Use the RC."];
+        [self cancelPilotTakeoff];
+    } else if(event==GATakeoffComplete) {
+        [self note:@"Takeoff hover confirmed. Server and ground anchor retained. Use RC to climb to 5-30 m, then tap Enable flight separately."];
+    }
+}
+// END pilot takeoff methods.
+
 - (NSString *)flightProblem {
+    if(GATakeoffBusy(_pilotTakeoff)) return [self takeoffStatus]; // pilot takeoff integration
     double now=CACurrentMediaTime();
     if(!_mock && !self.fc) return @"No aircraft connection";
     if(!_homeSet || !_gps || !GAValidPose(_pose)) return @"Need strong GPS and a ground anchor recorded before takeoff";
     if(now-_fcTime>1.5 || now-_batteryTime>5) return @"Aircraft telemetry is stale";
     if(_battery<30) return @"Battery must be at least 30% to enable flight";
-    if(!_flying) return @"Pilot must take off manually first, then climb to 5–30 m";
+    if(!_flying) return @"Pilot must use Take off or the RC, then climb to 5–30 m";
     if(!GAInsideFence(_pose,_home)) return @"Outside local limits: 40 m radius and 5–30 m relative altitude";
     return nil;
 }
 - (void)armFlight:(BOOL)flight {
+    if(GATakeoffBusy(_pilotTakeoff)) { [self note:[self takeoffStatus]]; return; } // pilot takeoff integration
     if(_closed || _enabling || _returning || _pendingSDKTransitions) { [self note:@"Wait for control transition / return to finish"]; return; }
     if(_releaseFailed) { [self note:@"Control release is unconfirmed. Use RC takeover, then press STOP to retry release."]; return; }
     if(!self.client.connected) { [self note:@"Connect to the server first"]; return; }
@@ -278,6 +357,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     });}];
 }
 - (void)stopAutomation:(NSString *)reason {
+    [self cancelPilotTakeoff]; // pilot takeoff integration
     BOOL hadControl=_flightEnabled || _enabling || _releaseFailed;
     ++_generation; _armed=NO; _flightEnabled=NO; _enabling=NO;
     if(self.active) [self finish:NO error:reason];
@@ -376,6 +456,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     if(_closed) return;
     double now=CACurrentMediaTime(), gap=now-_lastTick; _lastTick=now;
     if(_mock) _fcTime=_batteryTime=_gimbalTime=now;
+    [self updatePilotTakeoff]; // pilot takeoff integration
     if(_enabling && now-_enableTime>5) [self stopAutomation:@"Timed out enabling flight control"];
     if(_armed || _flightEnabled) {
         NSString *problem=nil;
@@ -426,7 +507,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         NSString *(^value)(NSString *,NSString *)=^NSString *(NSString *key,NSString *format) {
             id number=readout[key]; return [number isKindOfClass:NSNumber.class]?[NSString stringWithFormat:format,[number doubleValue]]:@"—";
         };
-        if(self.updated) self.updated([NSString stringWithFormat:@"%@ • %@\nBattery %@ • Alt %@ (takeoff) • Heading %@\nPosition %@, %@\nGPS %@ • Ground anchor %@ • %@",_mock?@"MOCK":self.aircraft?@"Mavic Air 2":@"No aircraft",self.client.connected?@"Server online":@"Server offline",value(@"battery_pct",@"%.0f%%"),value(@"altitude_m",@"%.1f m"),value(@"heading_deg",@"%.0f°"),value(@"latitude",@"%.6f"),value(@"longitude",@"%.6f"),[readout[@"gps_ok"] boolValue]?@"OK":@"waiting",_homeSet?@"OK":@"waiting",_returning?@"DJI RETURNING":_flightEnabled?@"FLIGHT ENABLED":_armed?@"CAMERA ONLY":@"DISARMED"]);
+        if(self.updated) self.updated([NSString stringWithFormat:@"%@ • %@\nBattery %@ • Alt %@ (takeoff) • Heading %@\nPosition %@, %@\nGPS %@ • Ground anchor %@ • %@",_mock?@"MOCK":self.aircraft?@"Mavic Air 2":@"No aircraft",self.client.connected?@"Server online":@"Server offline",value(@"battery_pct",@"%.0f%%"),value(@"altitude_m",@"%.1f m"),value(@"heading_deg",@"%.0f°"),value(@"latitude",@"%.6f"),value(@"longitude",@"%.6f"),[readout[@"gps_ok"] boolValue]?@"OK":@"waiting",_homeSet?@"OK":@"waiting",GATakeoffBusy(_pilotTakeoff)?[self takeoffStatus]:_returning?@"DJI RETURNING":_flightEnabled?@"FLIGHT ENABLED":_armed?@"CAMERA ONLY":@"DISARMED"]);
         if(self.stateUpdated) self.stateUpdated([self telemetry]);
     }
     // END display-only reporting.
