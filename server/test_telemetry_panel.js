@@ -13,4 +13,6 @@ Panel.render(element,badge,d.read(1700));
 assert.match(element.innerHTML,/Altitude<\/dt><dd>—/);assert.match(badge.textContent,/stale/);
 Panel.render(element,badge,null);assert.match(badge.textContent,/Waiting/);
 assert.equal(Panel.fields(null).length,12);
+assert.equal(Panel.fields({gps_signal_level:6}).find(row=>row[0]==='GPS signal')[1],'No signal');
+assert.equal(Panel.fields({gps_signal_level:255}).find(row=>row[0]==='GPS signal')[1],'—');
 console.log('Aircraft overview: altitude zero, coordinate precision, key stats, stale and disconnected states passed.');

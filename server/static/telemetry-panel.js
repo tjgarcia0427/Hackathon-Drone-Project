@@ -14,7 +14,7 @@
       ['Flight state',typeof d.flying==='boolean'?(d.flying?'Airborne':'On ground'):'—','Reported by the aircraft'],
       ['GPS',!d.telemetry_fresh?'—':d.gps_ok?'Strong':'Acquiring','Strong GPS is required for navigation'],
       ['Satellites',number(d.satellites,0),'Satellites observed'],
-      ['GPS signal',number(d.gps_signal_level,0,' / 5'),'DJI signal level'],
+      ['GPS signal',d.gps_signal_level===6?'No signal':Number.isInteger(d.gps_signal_level)&&d.gps_signal_level>=0&&d.gps_signal_level<=5?number(d.gps_signal_level,0,' / 5'):'—','DJI signal level'],
       ['Ground anchor',typeof d.ground_anchor_ok==='boolean'?(d.ground_anchor_ok?'Recorded':'Waiting'):'—','Recorded before takeoff'],
       ['Reading age',number(Number.isFinite(d.fc_age_ms)?d.fc_age_ms/1000:null,1,' s'),'Time since the flight-controller update'],
     ];
