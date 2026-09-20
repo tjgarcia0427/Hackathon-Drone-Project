@@ -46,13 +46,19 @@ static void Run(void) {
         if([scenario isEqual:@"returning"]) { state[@"mock"]=@NO; state[@"returning"]=@YES; }
         if([scenario isEqual:@"pending"]) state[@"pendingTransitions"]=@1;
         if([scenario isEqual:@"release-failed"]) { state[@"releaseFailed"]=@YES; state[@"pendingTransitions"]=@1; }
-        if([scenario isEqual:@"stale"]) { state[@"telemetryFresh"]=@NO; state[@"positionFresh"]=@NO; state[@"batteryFresh"]=@NO; }
+        if([scenario isEqual:@"stale"]) { state[@"telemetryFresh"]=@NO; state[@"positionFresh"]=@NO; state[@"batteryFresh"]=@NO; state[@"altitudeFresh"]=@NO; state[@"headingFresh"]=@NO; state[@"gpsFresh"]=@NO; }
+        if([scenario isEqual:@"gps-waiting"]) { state[@"mock"]=@NO; state[@"gps"]=@NO; state[@"homeSet"]=@NO; state[@"positionFresh"]=@NO; state[@"gpsFresh"]=@NO; state[@"displayAltitude"]=@0; }
         if([scenario isEqual:@"low-battery"]) { state[@"mock"]=@NO; state[@"battery"]=@24; }
         Invoke(root,@"refreshState");
         if([scenario isEqual:@"modal"]) Click(root,@"flightButton");
         if([scenario isEqual:@"log"]) Invoke(root,@"openLog");
         Later(^{
             [root.view layoutIfNeeded];
+            if([scenario isEqual:@"gps-waiting"] || [scenario isEqual:@"stale"]) {
+                NSArray *cells=[root valueForKey:@"cells"];
+                UILabel *altitude=[cells[1] valueForKey:@"value"];
+                Check([altitude.text isEqual:[scenario isEqual:@"gps-waiting"]?@"0.0 m":@"—"],@"Fresh grounded altitude must display without GPS; stale altitude must be hidden");
+            }
             if([scenario isEqual:@"procedure"]) {
                 UIButton *action=[root valueForKey:@"flightButton"];
                 UIView *ancestor=action.superview;

@@ -641,7 +641,7 @@ static UIView *NavyHeader(UIView *content) {
     NSDictionary *t=self.telemetry; GAOpState s=GAStateForTelemetry(t);
     BOOL started=self.bridge!=nil, mock=[t[@"mock"] boolValue], online=[t[@"serverOnline"] boolValue], aircraft=[t[@"aircraft"] boolValue];
     BOOL armed=[t[@"armed"] boolValue], flight=[t[@"flightEnabled"] boolValue];
-    BOOL positionFresh=[t[@"positionFresh"] boolValue], batteryFresh=[t[@"batteryFresh"] boolValue];
+    BOOL batteryFresh=[t[@"batteryFresh"] boolValue];
     double battery=t?[t[@"battery"] doubleValue]:-1;
     self.serverText.text=online?@"SERVER ONLINE":@"SERVER OFFLINE"; self.serverDot.backgroundColor=online?GA_OK:GA_STOP;
     self.aircraftText.text=started && mock?@"MOCK HARDWARE":started && aircraft?@"MAVIC AIR 2":@"NO AIRCRAFT";
@@ -669,17 +669,17 @@ static UIView *NavyHeader(UIView *content) {
     // No recording/FPS claim: neither is provided by the bridge's read-only snapshot.
     self.camSource.text=!started?@"NO FEED":mock?@"MOCK — NO CAMERA":aircraft?@"DJI CAMERA":@"NO AIRCRAFT";
     self.mockPreview.hidden=!(started && mock);
-    if(positionFresh) {
+    if([t[@"gpsFresh"] boolValue]) {
         double la=[t[@"latitude"] doubleValue], lo=[t[@"longitude"] doubleValue];
-        self.camCoords.text=[NSString stringWithFormat:@"%.4f %@  %.4f %@",fabs(la),la<0?@"S":@"N",fabs(lo),lo<0?@"W":@"E"];
+        self.camCoords.text=[NSString stringWithFormat:@"%.6f %@  %.6f %@",fabs(la),la<0?@"S":@"N",fabs(lo),lo<0?@"W":@"E"];
         NSTimeInterval at=[t[@"telemetryAt"] doubleValue];
         self.camClock.text=at>0?[self.clock stringFromDate:[NSDate dateWithTimeIntervalSince1970:at]]:@"";
     } else { self.camCoords.text=started?@"GPS / telemetry unavailable":@"—"; self.camClock.text=@""; }
     self.cells[0].value.text=batteryFresh && battery>=0?[NSString stringWithFormat:@"%.0f%%",battery]:@"—";
     self.cells[0].value.textColor=batteryFresh && battery>=0 && battery<30?GA_STOP:GA_INK;
-    self.cells[1].value.text=positionFresh?[NSString stringWithFormat:@"%.1f m",[t[@"altitude"] doubleValue]]:@"—";
-    self.cells[2].value.text=positionFresh?[NSString stringWithFormat:@"%.0f°",[t[@"heading"] doubleValue]]:@"—";
-    self.cells[3].value.text=positionFresh?@"OK":started?@"waiting":@"—";
+    self.cells[1].value.text=[t[@"altitudeFresh"] boolValue]?[NSString stringWithFormat:@"%.1f m",[t[@"displayAltitude"] doubleValue]]:@"—";
+    self.cells[2].value.text=[t[@"headingFresh"] boolValue]?[NSString stringWithFormat:@"%.0f°",[t[@"displayHeading"] doubleValue]]:@"—";
+    self.cells[3].value.text=[t[@"gpsFresh"] boolValue]?@"OK":started?@"waiting":@"—";
     self.cells[4].value.text=[t[@"homeSet"] boolValue]?@"Recorded":started?@"waiting":@"—";
 
     BOOL done[4]={started,online,armed,flight}; NSInteger completed=0;

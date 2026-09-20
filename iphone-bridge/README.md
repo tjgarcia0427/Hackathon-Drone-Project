@@ -133,7 +133,7 @@ The app's GPS velocity controller does not plan around obstacles or terrain. A 4
 
 | Capability | Behavior |
 |---|---|
-| Telemetry | Aircraft location, relative altitude, heading, gimbal pitch, battery, recorded ground anchor; about 1 Hz |
+| Telemetry | Navigation plus independent altitude/heading/battery observations; about 5 Hz. See [telemetry fix](../docs/TELEMETRY_FIX.md) |
 | Camera | DJIWidget preview; next-rendered-frame snapshots, JPEG downscaling, about 1 upload/sec without an upload queue |
 | `gimbal` | Absolute pitch −90° to 0°, completion checked against gimbal telemetry |
 | `yaw` | Relative rotation −180° to 180°, capped at 10°/sec, telemetry-based completion |

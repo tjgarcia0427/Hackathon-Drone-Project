@@ -25,6 +25,7 @@
         self.testState=[@{@"started":@NO,@"mock":@(mock),@"aircraft":@YES,@"serverOnline":@NO,
             @"battery":@78,@"batteryFresh":@YES,@"positionFresh":@YES,@"telemetryFresh":@YES,
             @"altitude":@9.8,@"heading":@92,@"latitude":@25.7617,@"longitude":@(-80.1918),
+            @"displayAltitude":@9.8,@"displayHeading":@92,@"altitudeFresh":@YES,@"headingFresh":@YES,@"gpsFresh":@YES,
             @"gps":@YES,@"homeSet":@YES,@"flying":@YES,@"distanceFromHome":@3,@"command":@""} mutableCopy];
     } return self;
 }

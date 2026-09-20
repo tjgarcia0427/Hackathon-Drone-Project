@@ -22,6 +22,8 @@ jobs:
         run: |
           xcrun clang -fobjc-arc -framework Foundation -Iiphone-bridge/ios/GuardianAngel iphone-bridge/tests/presentation_test.m -o /tmp/presentation_test
           /tmp/presentation_test
+          xcrun clang -fobjc-arc -framework Foundation -Iiphone-bridge/ios/GuardianAngel iphone-bridge/tests/telemetry_display_test.m -o /tmp/telemetry_display_test
+          /tmp/telemetry_display_test
           xcrun clang iphone-bridge/tests/navigation_test.c iphone-bridge/ios/GuardianAngel/Navigation.c -lm -o /tmp/navigation_test
           /tmp/navigation_test
       - uses: ruby/setup-ruby@v1

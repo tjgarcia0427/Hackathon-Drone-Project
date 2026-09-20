@@ -209,6 +209,7 @@
     </div>
   </section>
 </main>
+<script src="/static/telemetry-display.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const escapeHTML = v => String(v ?? "").replace(/[&<>"\']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","\'":"&#39;"}[c]));
@@ -217,24 +218,28 @@ const kv = (el, obj) => { el.innerHTML = obj ? Object.entries(obj).map(([k,v]) =
 const PHASE_ICON = { idle:'ph-pause', planned:'ph-list-checks', planning:'ph-list-checks', dispatched:'ph-paper-plane-tilt', searching:'ph-radar', found:'ph-person-simple', aborted:'ph-hand-palm' };
 let lastFrameAt = 0, frameTimes = [], lastDrone = null;
 
+const telemetryDisplay = new AircraftTelemetryDisplay();
+function receiveTelemetry(message) { telemetryDisplay.update(message,performance.now()); tele($('drone'),telemetryDisplay.read(performance.now())); }
+setInterval(()=>tele($('drone'),telemetryDisplay.read(performance.now())),200);
+
 function tele(el, d) {
-  if (!d) { el.innerHTML = '<div class="row"><span>—</span><span></span></div>'; return; }
+  if (!d) { el.innerHTML = '<div class="row"><span>—</span><span></span></div>'; $('camhud').textContent='Telemetry unavailable'; $('dronemeta').textContent=''; return; }
   lastDrone = d;
-  const bat = Number(d.battery_pct);
+  const bat = d.battery_pct;
   const cells = [
     ['Battery', Number.isFinite(bat) ? bat.toFixed(0)+'%' : '—', bat < 30 ? 'bad' : ''],
-    ['Altitude', fmt1(d.altitude_m)+' m'],
+    ['Altitude · takeoff', fmt1(d.altitude_m)+' m'],
     ['Heading', fmt1(d.heading_deg, 0)+'°'],
     ['Gimbal', fmt1(d.gimbal_pitch_deg, 0)+'°'],
-    ['Status', String(d.status || '—')],
-    ['Position', fmt1(d.latitude,4)+', '+fmt1(d.longitude,4), 'small'],
+    ['GPS / satellites', (d.gps_ok ? 'OK' : 'waiting')+' / '+fmt1(d.satellites,0)],
+    ['Position', fmt1(d.latitude,6)+', '+fmt1(d.longitude,6), 'small'],
   ];
   el.innerHTML = cells.map(([l,v,c]) => `<div class="cell"><div class="lbl">${escapeHTML(l)}</div><div class="val ${c||''}">${escapeHTML(v)}</div></div>`).join('');
   $('dronemeta').textContent = d.drone_id ? String(d.drone_id) : '';
   $('camhud').textContent = `ALT ${fmt1(d.altitude_m)} m · HDG ${fmt1(d.heading_deg,0)}° · ${fmtLL(d.latitude, d.longitude)}`;
 }
-const fmt1 = (n, p=1) => Number.isFinite(Number(n)) ? Number(n).toFixed(p) : '—';
-const fmtLL = (la, lo) => (Number.isFinite(la) && Number.isFinite(lo)) ? `${Math.abs(la).toFixed(4)} ${la<0?'S':'N'}  ${Math.abs(lo).toFixed(4)} ${lo<0?'W':'E'}` : '—';
+const fmt1 = (n, p=1) => Number.isFinite(n) ? n.toFixed(p) : '—';
+const fmtLL = (la, lo) => (Number.isFinite(la) && Number.isFinite(lo)) ? `${Math.abs(la).toFixed(6)} ${la<0?'S':'N'}  ${Math.abs(lo).toFixed(6)} ${lo<0?'W':'E'}` : '—';
 
 function render(s) {
   renderAI(s);
@@ -252,7 +257,7 @@ function render(s) {
   const v = $('planverdict');
   if (s.plan) { const ok = !!s.plan_ok; v.className = 'verdict ' + (ok ? 'ok' : 'bad'); v.innerHTML = ok ? '<i class="ph-bold ph-check-circle"></i>Approved' : '<i class="ph-bold ph-x-circle"></i>Rejected: ' + escapeHTML(s.plan_reason || ''); }
   else { v.className = 'verdict'; v.textContent = ''; }
-  tele($('drone'), s.drone);
+  receiveTelemetry(s);
   $('log').innerHTML = (s.log || []).map(fmtLog).join('');
   $('log').scrollTop = 1e9;
   if (s.found) { $('foundBanner').classList.add('show');
@@ -289,7 +294,7 @@ function connect() {
     if (m.type==='state') render(m.state);
     else if (m.type==='watch_alert') receiveWatchAlert(m.alert);
     else if (m.type==='log') { $('log').insertAdjacentHTML('beforeend', fmtLog(m.entry)); $('log').scrollTop=1e9; }
-    else if (m.type==='telemetry') tele($('drone'), m.drone);
+    else if (m.type==='telemetry') receiveTelemetry(m);
     else if (m.type==='frame') {
       const img = $('cam'); lastFrameAt = Date.now(); frameTimes.push(lastFrameAt);
       $('camtime').textContent = new Date().toLocaleTimeString([], {hour12:false});
@@ -297,7 +302,7 @@ function connect() {
       img.src = '/frame.jpg?t=' + Date.now();
       $('det').textContent = 'detector: ' + (m.detection ? (m.detection.person ? `person ${(m.detection.confidence*100).toFixed(0)}% · bbox ${JSON.stringify(m.detection.bbox)}` : 'no person') : 'not installed (visual AI only)'); }
   };
-  ws.onclose = () => setTimeout(connect, 1500);
+  ws.onclose = () => { receiveTelemetry({drone_connected:false}); setTimeout(connect, 1500); };
 }
 async function post(path, body) {
   const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:body?JSON.stringify(body):undefined});

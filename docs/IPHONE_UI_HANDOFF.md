@@ -1,5 +1,7 @@
 # iPhone UI redesign — branch handoff
 
+**Telemetry follow-up (September 20):** the functional telemetry fix is applied independently to `main` and this branch. Altitude/heading are now GPS-independent display observations, reporting is 5 Hz, and coordinates show six decimals. Flight/video preservation checks now allow the marked observation/reporting regions as well as the UI snapshot. See [TELEMETRY_FIX.md](TELEMETRY_FIX.md) for the implementation and regression handoff.
+
 Work on `ui-redesign`; do not merge into `main` until Lorenzo finishes the device regression. TJ explicitly authorized this branch on September 20. No pull request is required. The existing dashboard redesign on this branch belongs to Alfred and was preserved unchanged by this update.
 
 ## What changed
@@ -14,7 +16,7 @@ Corrections to the original redesign:
 - **Mock is explicit even while armed.** Mock flight and return states retain the mock label.
 - **Preview labels are truthful.** No recording indicator, invented resolution or invented FPS. Unknown/stale telemetry is shown as unavailable; its clock is based on the last telemetry timestamp. Dashboard uploads remain the existing approximately one JPEG per second.
 - **STOP is available on every screen**, including the full event log and the confirmation modal. The modal scrolls on small screens while its STOP stays pinned.
-- **The old status callback remains.** `updated(NSString *)` still works. `stateUpdated(NSDictionary *)` adds read-only state at 1 Hz; `telemetry` provides a fresh main-thread snapshot. The root UI polls the snapshot every 250 ms to expire stale readings promptly. These getters send no SDK commands.
+- **The old status callback remains.** `updated(NSString *)` still works. `stateUpdated(NSDictionary *)` adds read-only state at about 5 Hz; `telemetry` provides a fresh main-thread snapshot. The root UI polls the snapshot every 250 ms to expire stale readings promptly. These getters send no SDK commands.
 
 The DJI decoder delegate, Mavic Air 2 encoder selection/reset, software decode, video byte diagnostic, decoded snapshot/upload code, command protocol, timers, flight limits, GPS/anchor logic and arm/release logic are preserved from the real-hardware bench commit `4ebcf22b1c09b9872ff9a4503dfccdfbbacacd99`. `check_bridge_preservation.py` verifies the complete source after removing only the additive read-only snapshot and callback.
 
