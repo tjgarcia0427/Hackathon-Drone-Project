@@ -14,7 +14,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     double x=[v doubleValue]; if(!isfinite(x)||x<min||x>max) return NO;
     *out=x; return YES;
 }
-@interface DroneBridge () <DJISDKManagerDelegate,DJIFlightControllerDelegate,DJIBatteryDelegate,DJIGimbalDelegate,DJIVideoFeedListener> {
+@interface DroneBridge () <DJISDKManagerDelegate,DJIFlightControllerDelegate,DJIBatteryDelegate,DJIGimbalDelegate,DJIVideoFeedListener,DJIVideoPreviewerFrameControlDelegate> {
     GAPose _pose, _home, _target;
     BOOL _homeSet, _flying, _gps, _armed, _flightEnabled, _enabling, _mock, _closed;
     BOOL _snapshotPending, _returning, _rthAccepted, _releaseFailed;
@@ -62,6 +62,9 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
         [[DJIVideoPreviewer instance] setView:self.preview];
         [DJIVideoPreviewer instance].enableHardwareDecode=NO; // software (FFmpeg) decode: slower but works on every model
         [DJIVideoPreviewer instance].type=DJIVideoPreviewerTypeAutoAdapt;
+        // OcuSync 2 aircraft (Mavic Air 2, Mini 2, ...) embed decoding assist info in the feed. The previewer
+        // asks its frameControlHandler to parse it via the SDK; without this the decoder never emits a frame.
+        [DJIVideoPreviewer instance].frameControlHandler=self;
         [[DJIVideoPreviewer instance] start];
         [[DJISDKManager videoFeeder].primaryVideoFeed addListener:self withQueue:dispatch_get_main_queue()];
     }
@@ -147,6 +150,15 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     if(_videoTime-feedLogged>5) { feedLogged=_videoTime; [self note:[NSString stringWithFormat:@"Video feed: %lu bytes so far, previewer status %d",(unsigned long)feedBytes,(int)[DJIVideoPreviewer instance].status.isRunning]]; }
     [[DJIVideoPreviewer instance] push:(uint8_t *)videoData.bytes length:(int)videoData.length];
 }
+#pragma mark - DJIVideoPreviewerFrameControlDelegate (mirrors DJI's sample VideoPreviewerAdapter)
+- (BOOL)parseDecodingAssistInfoWithBuffer:(uint8_t *)buffer length:(int)length assistInfo:(DJIDecodingAssistInfo *)assistInfo {
+    return [[DJISDKManager videoFeeder].primaryVideoFeed parseDecodingAssistInfoWithBuffer:buffer length:length assistInfo:(void *)assistInfo];
+}
+- (BOOL)isNeedFitFrameWidth { return YES; }
+- (void)syncDecoderStatus:(BOOL)isNormal { [[DJISDKManager videoFeeder].primaryVideoFeed syncDecoderStatus:isNormal]; }
+- (void)decodingDidSucceedWithTimestamp:(uint32_t)timestamp { [[DJISDKManager videoFeeder].primaryVideoFeed decodingDidSucceedWithTimestamp:timestamp]; }
+- (void)decodingDidFail { [[DJISDKManager videoFeeder].primaryVideoFeed decodingDidFail]; }
+
 - (NSString *)flightProblem {
     double now=CACurrentMediaTime();
     if(!_mock && !self.fc) return @"No aircraft connection";
@@ -393,7 +405,7 @@ static BOOL Number(NSDictionary *d,NSString *key,double min,double max,double *o
     [self stopAutomation:@"Bridge closed"]; _closed=YES;
     [self.client disconnect]; [self.timer invalidate]; self.timer=nil;
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-    if(!_mock) { [[DJISDKManager videoFeeder].primaryVideoFeed removeListener:self]; [[DJIVideoPreviewer instance] unSetView]; [[DJIVideoPreviewer instance] close]; }
+    if(!_mock) { [DJIVideoPreviewer instance].frameControlHandler=nil; [[DJISDKManager videoFeeder].primaryVideoFeed removeListener:self]; [[DJIVideoPreviewer instance] unSetView]; [[DJIVideoPreviewer instance] close]; }
 }
 - (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
 @end
